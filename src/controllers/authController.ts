@@ -1,9 +1,8 @@
-import { google } from "googleapis";
 import { Request, Response } from "express";
-import bcrypt from "bcryptjs";
+import { google } from "googleapis";
 import jwt from "jsonwebtoken";
-import { supabase } from "../config/supabase";
 import { oauth2Client, scopes } from "../config/google";
+import { supabase } from "../config/supabase";
 
 export class AuthController {
   static async register(req: Request, res: Response) {
@@ -93,8 +92,8 @@ export class AuthController {
     try {
       // FIXED: Create new OAuth2 client for this callback to avoid conflicts
       const callbackOAuth2Client = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID_RAY,
-        process.env.GOOGLE_CLIENT_SECRET_RAY,
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
         process.env.GOOGLE_REDIRECT_URI
       );
 
@@ -332,8 +331,8 @@ export class AuthController {
 
       // FIXED: Test with fresh token
       const testOAuth2Client = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID_RAY,
-        process.env.GOOGLE_CLIENT_SECRET_RAY,
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
         process.env.GOOGLE_REDIRECT_URI
       );
 
@@ -486,8 +485,8 @@ export class AuthController {
       }
 
       const refreshOAuth2Client = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID_RAY,
-        process.env.GOOGLE_CLIENT_SECRET_RAY,
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
         process.env.GOOGLE_REDIRECT_URI
       );
 
@@ -570,8 +569,8 @@ export class AuthController {
         }
 
         const refreshOAuth2Client = new google.auth.OAuth2(
-          process.env.GOOGLE_CLIENT_ID_RAY,
-          process.env.GOOGLE_CLIENT_SECRET_RAY,
+          process.env.GOOGLE_CLIENT_ID,
+          process.env.GOOGLE_CLIENT_SECRET,
           process.env.GOOGLE_REDIRECT_URI
         );
 
