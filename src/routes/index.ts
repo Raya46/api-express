@@ -2,16 +2,22 @@ import { Router } from "express";
 import { AuthController } from "../controllers/authController";
 import {
   createCalendar,
-  createCalendarEvent,
-  createRecurringEvent,
-  deleteCalendarEvent,
-  getAvailableTimeSlots,
-  getCalendarEvent,
-  getCalendarEvents,
   getCalendars,
-  getFreeBusyInfo,
-  updateCalendarEvent,
+  updateCalendar,
+  deleteCalendar,
 } from "../controllers/calendarController";
+
+import {
+  createCalendarEvent,
+  getCalendarEvents,
+  getPrimaryCalendarEvents,
+  getCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+  getFreeBusyInfo,
+  getAvailableTimeSlots,
+  createRecurringEvent,
+} from "../controllers/eventController";
 import { requireGoogleAuth } from "../middleware/auth";
 
 const router = Router();
@@ -27,35 +33,32 @@ router.post("/google/disconnect", AuthController.disconnectGoogle);
 router.get("/auth/me", AuthController.getMe);
 
 router.use(requireGoogleAuth)
-// Calendar routes
-router.post('/calendars', createCalendar);
-router.get('/calendars', getCalendars);
 
-// Event management routes
-router.post('/calendars/:calendarId/events', createCalendarEvent);
-router.get('/calendars/:calendarId/events', getCalendarEvents);
-router.get('/calendars/:calendarId/events/:eventId', getCalendarEvent);
-router.put('/calendars/:calendarId/events/:eventId', updateCalendarEvent);
-router.delete('/calendars/:calendarId/events/:eventId', deleteCalendarEvent);
+// Calendar management routes
+router.post('/calendars', createCalendar); // Create new calendar
+router.get('/calendars', getCalendars); // Get all calendars
+router.put('/calendars/:calendarId', updateCalendar); // Update calendar
+router.delete('/calendars/:calendarId', deleteCalendar); // Delete calendar
 
-// Alternative routes for primary calendar
-router.post('/events', createCalendarEvent); // Uses primary calendar
-router.get('/events', getCalendarEvents); // Uses primary calendar
-router.get('/events/:eventId', getCalendarEvent);
-router.put('/events/:eventId', updateCalendarEvent);
-router.delete('/events/:eventId', deleteCalendarEvent);
+// Event management routes for specific calendars
+router.post('/calendars/:calendarId/events', createCalendarEvent); // Create event in specific calendar
+router.get('/calendars/:calendarId/events', getCalendarEvents); // Get events from specific calendar
+router.get('/calendars/:calendarId/events/:eventId', getCalendarEvent); // Get single event
+router.put('/calendars/:calendarId/events/:eventId', updateCalendarEvent); // Update event
+router.delete('/calendars/:calendarId/events/:eventId', deleteCalendarEvent); // Delete event
 
-// Additional utility routes
-router.get('/freebusy', getFreeBusyInfo);
-router.get('/available-slots', getAvailableTimeSlots);
-router.post('/recurring-events', createRecurringEvent);
-router.delete('/events/:eventId', deleteCalendarEvent);
+// Event management routes for primary calendar (convenience routes)
+router.post('/events', createCalendarEvent); // Create event in primary calendar
+router.get('/events', getPrimaryCalendarEvents); // Get events from primary calendar
+router.get('/events/:eventId', getCalendarEvent); // Get single event from primary calendar
+router.put('/events/:eventId', updateCalendarEvent); // Update event in primary calendar
+router.delete('/events/:eventId', deleteCalendarEvent); // Delete event from primary calendar
 
 // Recurring events
-router.post('/events/recurring', createRecurringEvent);
+router.post('/events/recurring', createRecurringEvent); // Create recurring event
 
 // Scheduling and availability
-router.get('/availability', getAvailableTimeSlots);
-router.get('/freebusy', getFreeBusyInfo);
+router.get('/freebusy', getFreeBusyInfo); // Get free/busy information
+router.get('/availability', getAvailableTimeSlots); // Get available time slots
 
 export default router;
