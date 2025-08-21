@@ -6,15 +6,21 @@ export async function tenantMiddleware(
   res: Response,
   next: NextFunction
 ) {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  // Try to get tenant ID from multiple sources
+  let tenantId = req.headers['x-tenant-id'] as string ||
+                 req.query.tenantId as string;
 
-  if (!session) {
-    return res.status(401).json({ error: "User not authenticated" });
+  // If no tenant ID from headers, try to get from authenticated user
+  if (!tenantId) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (session) {
+      tenantId = session.user.id;
+    }
   }
 
-  const tenantId = session.user.id;
   if (!tenantId) {
     return res.status(401).json({ error: "Tenant not identified" });
   }

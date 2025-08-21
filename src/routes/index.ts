@@ -1,14 +1,18 @@
 import { Router } from "express";
 import { AuthController } from "../controllers/authController";
-import { PostsController } from "../controllers/postsController";
 import {
   createCalendar,
-  getCalendars,
-  getCalendarEvents,
   createCalendarEvent,
+  createRecurringEvent,
+  deleteCalendarEvent,
+  getAvailableTimeSlots,
+  getCalendarEvent,
+  getCalendarEvents,
+  getCalendars,
+  getFreeBusyInfo,
+  updateCalendarEvent,
 } from "../controllers/calendarController";
-import { authMiddleware } from "../middleware/auth";
-import { tenantMiddleware } from "../middleware/tenant";
+import { requireGoogleAuth } from "../middleware/auth";
 
 const router = Router();
 
@@ -22,22 +26,36 @@ router.get("/google/status", AuthController.testGoogleConnection);
 router.post("/google/disconnect", AuthController.disconnectGoogle);
 router.get("/auth/me", AuthController.getMe);
 
-// Protected posts routes
-router.get("/posts", authMiddleware, PostsController.getAllPosts);
-router.get("/posts/my", authMiddleware, PostsController.getUserPosts);
-router.get("/posts/:id", authMiddleware, PostsController.getPost);
-router.post("/posts", authMiddleware, PostsController.createPost);
-router.put("/posts/:id", authMiddleware, PostsController.updatePost);
-router.delete("/posts/:id", authMiddleware, PostsController.deletePost);
-
+router.use(requireGoogleAuth)
 // Calendar routes
-router.post("/calendars", tenantMiddleware, createCalendar);
-router.get("/calendars", tenantMiddleware, getCalendars);
-router.get("/calendars/:calendarId/events", tenantMiddleware, getCalendarEvents);
-router.post(
-  "/calendars/:calendarId/events",
-  tenantMiddleware,
-  createCalendarEvent
-);
+router.post('/calendars', createCalendar);
+router.get('/calendars', getCalendars);
+
+// Event management routes
+router.post('/calendars/:calendarId/events', createCalendarEvent);
+router.get('/calendars/:calendarId/events', getCalendarEvents);
+router.get('/calendars/:calendarId/events/:eventId', getCalendarEvent);
+router.put('/calendars/:calendarId/events/:eventId', updateCalendarEvent);
+router.delete('/calendars/:calendarId/events/:eventId', deleteCalendarEvent);
+
+// Alternative routes for primary calendar
+router.post('/events', createCalendarEvent); // Uses primary calendar
+router.get('/events', getCalendarEvents); // Uses primary calendar
+router.get('/events/:eventId', getCalendarEvent);
+router.put('/events/:eventId', updateCalendarEvent);
+router.delete('/events/:eventId', deleteCalendarEvent);
+
+// Additional utility routes
+router.get('/freebusy', getFreeBusyInfo);
+router.get('/available-slots', getAvailableTimeSlots);
+router.post('/recurring-events', createRecurringEvent);
+router.delete('/events/:eventId', deleteCalendarEvent);
+
+// Recurring events
+router.post('/events/recurring', createRecurringEvent);
+
+// Scheduling and availability
+router.get('/availability', getAvailableTimeSlots);
+router.get('/freebusy', getFreeBusyInfo);
 
 export default router;
