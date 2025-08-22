@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabase';
 import { AuthController } from '../controllers/authController';
+import { TelegramAuthController } from '../controllers/telegramController';
 
 // Extend Express Request interface to include user and hasGoogleAuth
 declare global {
@@ -164,67 +165,24 @@ const checkGoogleTokenValidity = async (
   }
 };
 
-// Optional middleware for endpoints that work with or without Google auth
-export const optionalGoogleAuth = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  authenticateToken(req, res, async (err) => {
-    if (err) return next(err);
+export const telegramAuthMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+  const telegramChatId = req.headers['x-telegram-chat-id'];
+  
+  if (!telegramChatId) {
+    return res.status(401).json({ error: "Telegram chat ID required" });
+  }
 
-    try {
-      if (req.user) { // Check if user object exists
-        // FIX: Initialize property on the existing user object
-        req.user.hasGoogleAuth = false; 
-
-        const { data } = await supabase
-          .from('users')
-          .select('google_access_token')
-          .eq('id', req.user.id)
-          .single();
-
-        if (data?.google_access_token) {
-          // FIX: Update property on the existing user object
-          req.user.hasGoogleAuth = true;
-        }
-      }
-    } catch (dbError) {
-      console.error('Optional Google auth DB check failed, but continuing as request is optional.', dbError);
-    }
-    
-    // Always call next() to proceed
+  try {
+    const user = await TelegramAuthController.getUserByTelegramId(parseInt(telegramChatId as string));
+    req.user = user;
     next();
-  });
+  } catch (error: any) {
+    res.status(401).json({ error: error.message });
+  }
 };
 
-// Error handler specifically for authentication errors
-export const handleAuthError = (
-  error: any,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  console.error('Authentication error:', error);
 
-  if (error.message?.includes('authenticate') || error.code === 401) {
-    return res.status(401).json({ 
-      error: 'Authentication required',
-      needsAuth: true,
-      authUrl: `${process.env.BASE_URL}/api/auth/google`
-    });
-  }
 
-  if (error.message?.includes('refresh token')) {
-    return res.status(401).json({ 
-      error: 'Token refresh failed - re-authentication required',
-      needsAuth: true,
-      authUrl: `${process.env.BASE_URL}/api/auth/google`
-    });
-  }
-
-  next(error);
-};
 
 // Middleware to add CORS headers for auth endpoints
 export const corsForAuth = (req: Request, res: Response, next: NextFunction) => {

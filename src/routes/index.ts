@@ -18,7 +18,7 @@ import {
   getAvailableTimeSlots,
   createRecurringEvent,
 } from "../controllers/eventController";
-import { requireGoogleAuth } from "../middleware/auth";
+import { requireGoogleAuth, telegramAuthMiddleware } from "../middleware/auth";
 import { TelegramAuthController } from "../controllers/telegramController";
 
 const router = Router();
@@ -43,30 +43,30 @@ router.post("/google/disconnect", requireGoogleAuth, AuthController.disconnectGo
 router.post("/telegram/disconnect", requireGoogleAuth, TelegramAuthController.disconnectTelegram);
 
 // Calendar management routes (require Google auth)
-router.post("/calendars", requireGoogleAuth, createCalendar);
-router.get("/calendars", requireGoogleAuth, getCalendars);
-router.put("/calendars/:calendarId", requireGoogleAuth, updateCalendar);
-router.delete("/calendars/:calendarId", requireGoogleAuth, deleteCalendar);
+router.post("/calendars", telegramAuthMiddleware, createCalendar);
+router.get("/calendars", telegramAuthMiddleware, getCalendars);
+router.put("/calendars/:calendarId", telegramAuthMiddleware, updateCalendar);
+router.delete("/calendars/:calendarId", telegramAuthMiddleware, deleteCalendar);
 
 // Event management routes for specific calendars (require Google auth)
-router.post("/calendars/:calendarId/events", requireGoogleAuth, createCalendarEvent);
-router.get("/calendars/:calendarId/events", requireGoogleAuth, getCalendarEvents);
-router.get("/calendars/:calendarId/events/:eventId", requireGoogleAuth, getCalendarEvent);
-router.put("/calendars/:calendarId/events/:eventId", requireGoogleAuth, updateCalendarEvent);
-router.delete("/calendars/:calendarId/events/:eventId", requireGoogleAuth, deleteCalendarEvent);
+router.post("/calendars/:calendarId/events", telegramAuthMiddleware, createCalendarEvent);
+router.get("/calendars/:calendarId/events", telegramAuthMiddleware, getCalendarEvents);
+router.get("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, getCalendarEvent);
+router.put("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, updateCalendarEvent);
+router.delete("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, deleteCalendarEvent);
 
 // Event management routes for primary calendar (require Google auth)
-router.post("/events", requireGoogleAuth, createCalendarEvent);
-router.get("/events", requireGoogleAuth, getPrimaryCalendarEvents);
-router.get("/events/:eventId", requireGoogleAuth, getCalendarEvent);
-router.put("/events/:eventId", requireGoogleAuth, updateCalendarEvent);
-router.delete("/events/:eventId", requireGoogleAuth, deleteCalendarEvent);
+router.post("/events", telegramAuthMiddleware, createCalendarEvent);
+router.get("/events", telegramAuthMiddleware, getPrimaryCalendarEvents);
+router.get("/events/:eventId", telegramAuthMiddleware, getCalendarEvent);
+router.put("/events/:eventId", telegramAuthMiddleware, updateCalendarEvent);
+router.delete("/events/:eventId", telegramAuthMiddleware, deleteCalendarEvent);
 
 // Recurring events (require Google auth)
-router.post("/events/recurring", requireGoogleAuth, createRecurringEvent);
+router.post("/events/recurring", telegramAuthMiddleware, createRecurringEvent);
 
 // Scheduling and availability (require Google auth)
-router.get("/freebusy", requireGoogleAuth, getFreeBusyInfo);
-router.get("/availability", requireGoogleAuth, getAvailableTimeSlots);
+router.get("/freebusy", telegramAuthMiddleware, getFreeBusyInfo);
+router.get("/availability", telegramAuthMiddleware, getAvailableTimeSlots);
 
 export default router;
