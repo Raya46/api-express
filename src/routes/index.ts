@@ -19,6 +19,7 @@ import {
   createRecurringEvent,
 } from "../controllers/eventController";
 import { requireGoogleAuth } from "../middleware/auth";
+import { TelegramAuthController } from "../controllers/telegramController";
 
 const router = Router();
 
@@ -31,6 +32,18 @@ router.get("/auth/callback", AuthController.oauthCallback);
 router.get("/google/status", AuthController.testGoogleConnection);
 router.post("/google/disconnect", AuthController.disconnectGoogle);
 router.get("/auth/me", AuthController.getMe);
+
+// telegram
+router.post('/telegram/oauth/generate', TelegramAuthController.generateTelegramOAuthUrl);
+
+// OAuth callback (update existing callback to handle telegram)
+router.get('/oauth/callback', TelegramAuthController.handleTelegramOAuthCallback);
+
+// Check if telegram is authenticated
+router.get('/telegram/check/:telegram_chat_id', TelegramAuthController.checkTelegramAuth);
+
+// Disconnect telegram (authenticated route)
+router.post('/telegram/disconnect', TelegramAuthController.disconnectTelegram);
 
 router.use(requireGoogleAuth)
 
