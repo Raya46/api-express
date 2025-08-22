@@ -3,6 +3,7 @@ import { google } from "googleapis";
 import jwt from "jsonwebtoken";
 import { supabase } from "../config/supabase";
 import crypto from "crypto";
+import { AuthController } from "./authController";
 
 // Extend AuthController with Telegram functions
 export class TelegramAuthController {
@@ -411,4 +412,25 @@ export class TelegramAuthController {
       res.status(500).json({ error: error.message });
     }
   }
+  // GET /api/auth/user/:userId/with-token
+static async getUserWithToken(req: Request, res: Response) {
+  try {
+    const { userId } = req.params;
+    const user = await AuthController.getUserWithGoogleToken(userId);
+    
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        full_name: user.full_name,
+        google_access_token: user.google_access_token,
+        token_expires_at: user.token_expires_at
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 }
+}
+

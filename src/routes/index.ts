@@ -28,7 +28,7 @@ router.post("/auth/register", AuthController.register);
 router.post("/auth/login", AuthController.login);
 router.post("/auth/logout", AuthController.logout);
 router.get("/auth/google", AuthController.googleAuth);
-router.get("/auth/callback", AuthController.oauthCallback);
+// router.get("/auth/callback", AuthController.oauthCallback);
 router.get("/google/status", AuthController.testGoogleConnection);
 router.post("/google/disconnect", AuthController.disconnectGoogle);
 router.get("/auth/me", AuthController.getMe);
@@ -37,8 +37,8 @@ router.get("/auth/me", AuthController.getMe);
 router.post('/telegram/oauth/generate', TelegramAuthController.generateTelegramOAuthUrl);
 
 // OAuth callback (update existing callback to handle telegram)
-router.get('/oauth/callback', TelegramAuthController.handleTelegramOAuthCallback);
-
+router.get('/auth/callback', TelegramAuthController.handleTelegramOAuthCallback);
+router.get('/api/auth/user/:userId/with-token', TelegramAuthController.getUserWithToken)
 // Check if telegram is authenticated
 router.get('/telegram/check/:telegram_chat_id', TelegramAuthController.checkTelegramAuth);
 
