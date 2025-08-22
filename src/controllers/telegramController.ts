@@ -4,20 +4,18 @@ import jwt from "jsonwebtoken";
 import { supabase } from "../config/supabase";
 import crypto from "crypto";
 import { AuthController } from "./authController";
+import { oauth2Client, scopes } from "../config/google";
 
-// Extend AuthController with Telegram functions
 export class TelegramAuthController {
   
-  // 1. Generate OAuth URL with Telegram state
   static async generateTelegramOAuthUrl(req: Request, res: Response) {
     try {
-      const { telegram_chat_id, telegram_username, telegram_first_name, telegram_last_name } = req.body;
+      const { telegram_chat_id } = req.body;
       
       if (!telegram_chat_id) {
         return res.status(400).json({ error: "telegram_chat_id is required" });
       }
 
-      // Generate session token for this Telegram user
       const sessionToken = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
@@ -39,13 +37,9 @@ export class TelegramAuthController {
       const state = JSON.stringify({
         type: 'telegram_oauth',
         telegram_chat_id: telegram_chat_id,
-        telegram_username: telegram_username,
-        telegram_first_name: telegram_first_name,
-        telegram_last_name: telegram_last_name,
         session_token: sessionToken
       });
 
-      const { oauth2Client, scopes } = require("../config/google");
       
       const authUrl = oauth2Client.generateAuthUrl({
         access_type: "offline",

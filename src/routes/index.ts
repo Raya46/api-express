@@ -23,55 +23,50 @@ import { TelegramAuthController } from "../controllers/telegramController";
 
 const router = Router();
 
-// Auth routes
+
+// Standard Auth routes (public)
 router.post("/auth/register", AuthController.register);
 router.post("/auth/login", AuthController.login);
 router.post("/auth/logout", AuthController.logout);
 router.get("/auth/google", AuthController.googleAuth);
-// router.get("/auth/callback", AuthController.oauthCallback);
-router.get("/google/status", AuthController.testGoogleConnection);
-router.post("/google/disconnect", AuthController.disconnectGoogle);
 router.get("/auth/me", AuthController.getMe);
 
-// telegram
-router.post('/telegram/oauth/generate', TelegramAuthController.generateTelegramOAuthUrl);
+// Telegram Auth routes (public) - MUST be before requireGoogleAuth middleware
+router.post("/telegram/oauth/generate", TelegramAuthController.generateTelegramOAuthUrl);
+router.get("/auth/callback", TelegramAuthController.handleTelegramOAuthCallback);
+router.get("/telegram/check/:telegram_chat_id", TelegramAuthController.checkTelegramAuth);
+router.get("/auth/user/:userId/with-token", TelegramAuthController.getUserWithToken);
 
-// OAuth callback (update existing callback to handle telegram)
-router.get('/auth/callback', TelegramAuthController.handleTelegramOAuthCallback);
-router.get('/api/auth/user/:userId/with-token', TelegramAuthController.getUserWithToken)
-// Check if telegram is authenticated
-router.get('/telegram/check/:telegram_chat_id', TelegramAuthController.checkTelegramAuth);
+// Google-specific routes (require Google auth)
+router.get("/google/status", requireGoogleAuth, AuthController.testGoogleConnection);
+router.post("/google/disconnect", requireGoogleAuth, AuthController.disconnectGoogle);
+router.post("/telegram/disconnect", requireGoogleAuth, TelegramAuthController.disconnectTelegram);
 
-// Disconnect telegram (authenticated route)
-router.post('/telegram/disconnect', TelegramAuthController.disconnectTelegram);
+// Calendar management routes (require Google auth)
+router.post("/calendars", requireGoogleAuth, createCalendar);
+router.get("/calendars", requireGoogleAuth, getCalendars);
+router.put("/calendars/:calendarId", requireGoogleAuth, updateCalendar);
+router.delete("/calendars/:calendarId", requireGoogleAuth, deleteCalendar);
 
-router.use(requireGoogleAuth)
+// Event management routes for specific calendars (require Google auth)
+router.post("/calendars/:calendarId/events", requireGoogleAuth, createCalendarEvent);
+router.get("/calendars/:calendarId/events", requireGoogleAuth, getCalendarEvents);
+router.get("/calendars/:calendarId/events/:eventId", requireGoogleAuth, getCalendarEvent);
+router.put("/calendars/:calendarId/events/:eventId", requireGoogleAuth, updateCalendarEvent);
+router.delete("/calendars/:calendarId/events/:eventId", requireGoogleAuth, deleteCalendarEvent);
 
-// Calendar management routes
-router.post('/calendars', createCalendar); // Create new calendar
-router.get('/calendars', getCalendars); // Get all calendars
-router.put('/calendars/:calendarId', updateCalendar); // Update calendar
-router.delete('/calendars/:calendarId', deleteCalendar); // Delete calendar
+// Event management routes for primary calendar (require Google auth)
+router.post("/events", requireGoogleAuth, createCalendarEvent);
+router.get("/events", requireGoogleAuth, getPrimaryCalendarEvents);
+router.get("/events/:eventId", requireGoogleAuth, getCalendarEvent);
+router.put("/events/:eventId", requireGoogleAuth, updateCalendarEvent);
+router.delete("/events/:eventId", requireGoogleAuth, deleteCalendarEvent);
 
-// Event management routes for specific calendars
-router.post('/calendars/:calendarId/events', createCalendarEvent); // Create event in specific calendar
-router.get('/calendars/:calendarId/events', getCalendarEvents); // Get events from specific calendar
-router.get('/calendars/:calendarId/events/:eventId', getCalendarEvent); // Get single event
-router.put('/calendars/:calendarId/events/:eventId', updateCalendarEvent); // Update event
-router.delete('/calendars/:calendarId/events/:eventId', deleteCalendarEvent); // Delete event
+// Recurring events (require Google auth)
+router.post("/events/recurring", requireGoogleAuth, createRecurringEvent);
 
-// Event management routes for primary calendar (convenience routes)
-router.post('/events', createCalendarEvent); // Create event in primary calendar
-router.get('/events', getPrimaryCalendarEvents); // Get events from primary calendar
-router.get('/events/:eventId', getCalendarEvent); // Get single event from primary calendar
-router.put('/events/:eventId', updateCalendarEvent); // Update event in primary calendar
-router.delete('/events/:eventId', deleteCalendarEvent); // Delete event from primary calendar
-
-// Recurring events
-router.post('/events/recurring', createRecurringEvent); // Create recurring event
-
-// Scheduling and availability
-router.get('/freebusy', getFreeBusyInfo); // Get free/busy information
-router.get('/availability', getAvailableTimeSlots); // Get available time slots
+// Scheduling and availability (require Google auth)
+router.get("/freebusy", requireGoogleAuth, getFreeBusyInfo);
+router.get("/availability", requireGoogleAuth, getAvailableTimeSlots);
 
 export default router;
