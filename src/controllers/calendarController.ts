@@ -72,18 +72,10 @@ async function getAuthorizedClient(tenantId: string) {
   }
 }
 
-// Helper function to get tenant ID from request
-function getTenantId(req: Request): string {
-  const tenantId = req.tenantId;
-  if (!tenantId) {
-    throw new Error("Tenant not identified");
-  }
-  return tenantId;
-}
 
 export async function createCalendar(req: Request, res: Response) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -134,7 +126,7 @@ export async function createCalendar(req: Request, res: Response) {
 // FIXED: New function to get all calendars
 export async function getCalendars(req: Request, res: Response) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -176,7 +168,7 @@ export async function getCalendars(req: Request, res: Response) {
 // FIXED: New function to update calendar
 export async function updateCalendar(req: Request, res: Response) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -246,7 +238,7 @@ export async function updateCalendar(req: Request, res: Response) {
 // FIXED: New function to delete calendar
 export async function deleteCalendar(req: Request, res: Response) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });

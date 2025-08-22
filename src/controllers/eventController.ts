@@ -72,18 +72,10 @@ async function getAuthorizedClient(tenantId: string) {
   }
 }
 
-// Helper function to get tenant ID from request
-function getTenantId(req: Request): string {
-  const tenantId = req.tenantId;
-  if (!tenantId) {
-    throw new Error("Tenant not identified");
-  }
-  return tenantId;
-}
 
 export async function createCalendarEvent(req: Request, res: Response) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -175,7 +167,7 @@ export async function createCalendarEvent(req: Request, res: Response) {
 // FIXED: New function to update calendar event
 export async function updateCalendarEvent(req: Request, res: Response) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -265,7 +257,7 @@ export async function updateCalendarEvent(req: Request, res: Response) {
 // FIXED: New function to delete calendar event
 export async function deleteCalendarEvent(req: Request, res: Response) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -311,7 +303,7 @@ export async function deleteCalendarEvent(req: Request, res: Response) {
 // FIXED: New function to get single event
 export async function getCalendarEvent(req: Request, res: Response) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -367,7 +359,7 @@ export async function getCalendarEvent(req: Request, res: Response) {
 // FIXED: New function to get calendar events (generic function)
 async function getCalendarEventsInternal(req: Request, res: Response, calendarId: string) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -457,7 +449,7 @@ export async function getPrimaryCalendarEvents(req: Request, res: Response) {
 // FIXED: New function to check availability and get free/busy times
 export async function getFreeBusyInfo(req: Request, res: Response) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -509,7 +501,7 @@ export async function getFreeBusyInfo(req: Request, res: Response) {
 // FIXED: New function to get available time slots
 export async function getAvailableTimeSlots(req: Request, res: Response) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -596,7 +588,7 @@ export async function getAvailableTimeSlots(req: Request, res: Response) {
 // FIXED: New function to create recurring events
 export async function createRecurringEvent(req: Request, res: Response) {
   try {
-    const tenantId = getTenantId(req);
+    const tenantId = req.body.tenantId
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
