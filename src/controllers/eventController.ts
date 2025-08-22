@@ -13,11 +13,15 @@ async function getAuthorizedClient(tenantId: string) {
       .single();
 
     if (error || !tenantToken) {
-      throw new Error("Tenant tokens not found. Please authenticate with Google first.");
+      throw new Error(
+        "Tenant tokens not found. Please authenticate with Google first."
+      );
     }
 
     if (!tenantToken.access_token) {
-      throw new Error("No Google access token available - tenant needs to authenticate");
+      throw new Error(
+        "No Google access token available - tenant needs to authenticate"
+      );
     }
 
     // Create OAuth2 client instance
@@ -30,7 +34,9 @@ async function getAuthorizedClient(tenantId: string) {
     oauth2Client.setCredentials({
       access_token: tenantToken.access_token,
       refresh_token: tenantToken.refresh_token,
-      expiry_date: tenantToken.expiry_date ? new Date(tenantToken.expiry_date).getTime() : undefined,
+      expiry_date: tenantToken.expiry_date
+        ? new Date(tenantToken.expiry_date).getTime()
+        : undefined,
     });
 
     // Auto-refresh tokens when they expire
@@ -51,7 +57,9 @@ async function getAuthorizedClient(tenantId: string) {
         }
 
         if (newTokens.expiry_date) {
-          updateData.expiry_date = new Date(newTokens.expiry_date).toISOString();
+          updateData.expiry_date = new Date(
+            newTokens.expiry_date
+          ).toISOString();
         }
 
         await supabase
@@ -72,10 +80,9 @@ async function getAuthorizedClient(tenantId: string) {
   }
 }
 
-
 export async function createCalendarEvent(req: Request, res: Response) {
   try {
-    const tenantId = req.body.tenantId
+    const tenantId = req.body.tenantId;
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -89,13 +96,13 @@ export async function createCalendarEvent(req: Request, res: Response) {
       attendees,
       reminders,
       visibility = "default",
-      timeZone = "Asia/Jakarta"
+      timeZone = "Asia/Jakarta",
     } = req.body;
 
     // FIXED: Validate required fields
     if (!summary || !start || !end) {
       return res.status(400).json({
-        error: "Missing required fields: summary, start, end"
+        error: "Missing required fields: summary, start, end",
       });
     }
 
@@ -112,10 +119,12 @@ export async function createCalendarEvent(req: Request, res: Response) {
         timeZone,
       },
       attendees: attendees?.map((email: string) => ({ email })),
-      reminders: reminders ? {
-        useDefault: false,
-        overrides: reminders
-      } : { useDefault: true },
+      reminders: reminders
+        ? {
+            useDefault: false,
+            overrides: reminders,
+          }
+        : { useDefault: true },
       visibility,
     };
 
@@ -158,7 +167,7 @@ export async function createCalendarEvent(req: Request, res: Response) {
     } else {
       res.status(500).json({
         error: "Failed to create event",
-        details: error.message
+        details: error.message,
       });
     }
   }
@@ -167,7 +176,7 @@ export async function createCalendarEvent(req: Request, res: Response) {
 // FIXED: New function to update calendar event
 export async function updateCalendarEvent(req: Request, res: Response) {
   try {
-    const tenantId = req.body.tenantId
+    const tenantId = req.body.tenantId;
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -183,7 +192,7 @@ export async function updateCalendarEvent(req: Request, res: Response) {
       attendees,
       reminders,
       visibility,
-      timeZone = "Asia/Jakarta"
+      timeZone = "Asia/Jakarta",
     } = req.body;
 
     const eventUpdate: any = {};
@@ -203,7 +212,7 @@ export async function updateCalendarEvent(req: Request, res: Response) {
     if (reminders) {
       eventUpdate.reminders = {
         useDefault: false,
-        overrides: reminders
+        overrides: reminders,
       };
     }
     if (visibility) eventUpdate.visibility = visibility;
@@ -228,7 +237,8 @@ export async function updateCalendarEvent(req: Request, res: Response) {
       if (end) updateData.end_time = end;
       if (attendees) updateData.attendees = JSON.stringify(attendees);
 
-      await supabase.from("events")
+      await supabase
+        .from("events")
         .update(updateData)
         .eq("id", eventId)
         .eq("user_id", tenantId);
@@ -248,7 +258,7 @@ export async function updateCalendarEvent(req: Request, res: Response) {
     } else {
       res.status(500).json({
         error: "Failed to update event",
-        details: error.message
+        details: error.message,
       });
     }
   }
@@ -257,7 +267,7 @@ export async function updateCalendarEvent(req: Request, res: Response) {
 // FIXED: New function to delete calendar event
 export async function deleteCalendarEvent(req: Request, res: Response) {
   try {
-    const tenantId = req.body.tenantId
+    const tenantId = req.body.tenantId;
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -272,7 +282,8 @@ export async function deleteCalendarEvent(req: Request, res: Response) {
 
     // Delete from database
     try {
-      await supabase.from("events")
+      await supabase
+        .from("events")
         .delete()
         .eq("id", eventId)
         .eq("user_id", tenantId);
@@ -294,7 +305,7 @@ export async function deleteCalendarEvent(req: Request, res: Response) {
     } else {
       res.status(500).json({
         error: "Failed to delete event",
-        details: error.message
+        details: error.message,
       });
     }
   }
@@ -303,12 +314,13 @@ export async function deleteCalendarEvent(req: Request, res: Response) {
 // FIXED: New function to get single event
 export async function getCalendarEvent(req: Request, res: Response) {
   try {
-    const tenantId = req.body.tenantId
+    const tenantId = req.body.tenantId;
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
     const { eventId } = req.params;
-    const calendarId = req.params.calendarId || req.query.calendarId as string || "primary";
+    const calendarId =
+      req.params.calendarId || (req.query.calendarId as string) || "primary";
 
     const result = await calendar.events.get({
       calendarId,
@@ -324,10 +336,10 @@ export async function getCalendarEvent(req: Request, res: Response) {
       end: event.end?.dateTime || event.end?.date,
       location: event.location,
       status: event.status,
-      attendees: event.attendees?.map(attendee => ({
+      attendees: event.attendees?.map((attendee) => ({
         email: attendee.email,
         responseStatus: attendee.responseStatus,
-        displayName: attendee.displayName
+        displayName: attendee.displayName,
       })),
       creator: event.creator,
       organizer: event.organizer,
@@ -350,16 +362,20 @@ export async function getCalendarEvent(req: Request, res: Response) {
     } else {
       res.status(500).json({
         error: "Failed to fetch event",
-        details: error.message
+        details: error.message,
       });
     }
   }
 }
 
 // FIXED: New function to get calendar events (generic function)
-async function getCalendarEventsInternal(req: Request, res: Response, calendarId: string) {
+async function getCalendarEventsInternal(
+  req: Request,
+  res: Response,
+  calendarId: string
+) {
   try {
-    const tenantId = req.body.tenantId
+    const tenantId = req.body.tenantId;
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -377,9 +393,19 @@ async function getCalendarEventsInternal(req: Request, res: Response, calendarId
     const queryParams: any = {
       calendarId,
       maxResults: parseInt(maxResults as string),
-      singleEvents: singleEvents === "true",
-      orderBy: orderBy as string,
     };
+
+    if (orderBy) {
+      queryParams.orderBy = orderBy;
+      if (orderBy === "startTime") {
+        queryParams.singleEvents = true; // enforce requirement
+      }
+    }
+
+    // only set if caller explicitly passes
+    if (req.query.singleEvents !== undefined) {
+      queryParams.singleEvents = req.query.singleEvents === "true";
+    }
 
     if (timeMin) queryParams.timeMin = timeMin as string;
     if (timeMax) queryParams.timeMax = timeMax as string;
@@ -388,27 +414,28 @@ async function getCalendarEventsInternal(req: Request, res: Response, calendarId
 
     const result = await calendar.events.list(queryParams);
 
-    const events = result.data.items?.map(event => ({
-      id: event.id,
-      summary: event.summary,
-      description: event.description,
-      start: event.start?.dateTime || event.start?.date,
-      end: event.end?.dateTime || event.end?.date,
-      location: event.location,
-      status: event.status,
-      attendees: event.attendees?.map(attendee => ({
-        email: attendee.email,
-        responseStatus: attendee.responseStatus,
-        displayName: attendee.displayName
-      })),
-      creator: event.creator,
-      organizer: event.organizer,
-      htmlLink: event.htmlLink,
-      reminders: event.reminders,
-      visibility: event.visibility,
-      recurringEventId: event.recurringEventId,
-      originalStartTime: event.originalStartTime,
-    })) || [];
+    const events =
+      result.data.items?.map((event) => ({
+        id: event.id,
+        summary: event.summary,
+        description: event.description,
+        start: event.start?.dateTime || event.start?.date,
+        end: event.end?.dateTime || event.end?.date,
+        location: event.location,
+        status: event.status,
+        attendees: event.attendees?.map((attendee) => ({
+          email: attendee.email,
+          responseStatus: attendee.responseStatus,
+          displayName: attendee.displayName,
+        })),
+        creator: event.creator,
+        organizer: event.organizer,
+        htmlLink: event.htmlLink,
+        reminders: event.reminders,
+        visibility: event.visibility,
+        recurringEventId: event.recurringEventId,
+        originalStartTime: event.originalStartTime,
+      })) || [];
 
     res.json({
       events,
@@ -428,7 +455,7 @@ async function getCalendarEventsInternal(req: Request, res: Response, calendarId
     } else {
       res.status(500).json({
         error: "Failed to fetch calendar events",
-        details: error.message
+        details: error.message,
       });
     }
   }
@@ -442,42 +469,38 @@ export async function getCalendarEvents(req: Request, res: Response) {
 
 // FIXED: New function to get events from primary calendar
 export async function getPrimaryCalendarEvents(req: Request, res: Response) {
-  const calendarId = req.query.calendarId as string || "primary";
+  const calendarId = (req.query.calendarId as string) || "primary";
   await getCalendarEventsInternal(req, res, calendarId);
 }
 
 // FIXED: New function to check availability and get free/busy times
 export async function getFreeBusyInfo(req: Request, res: Response) {
   try {
-    const tenantId = req.body.tenantId
+    const tenantId = req.body.tenantId;
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
 
-    const {
-      timeMin,
-      timeMax,
-      calendarIds = ["primary"]
-    } = req.query;
+    const { timeMin, timeMax, calendarIds = ["primary"] } = req.query;
 
     if (!timeMin || !timeMax) {
       return res.status(400).json({
-        error: "timeMin and timeMax are required"
+        error: "timeMin and timeMax are required",
       });
     }
 
     const calendarsArray = Array.isArray(calendarIds)
-      ? calendarIds as string[]
+      ? (calendarIds as string[])
       : [calendarIds as string];
 
     const freeBusyQuery = {
       timeMin: timeMin as string,
       timeMax: timeMax as string,
-      items: calendarsArray.map(id => ({ id }))
+      items: calendarsArray.map((id) => ({ id })),
     };
 
     const result = await calendar.freebusy.query({
-      requestBody: freeBusyQuery
+      requestBody: freeBusyQuery,
     });
 
     res.json(result.data);
@@ -492,7 +515,7 @@ export async function getFreeBusyInfo(req: Request, res: Response) {
     } else {
       res.status(500).json({
         error: "Failed to fetch free/busy info",
-        details: error.message
+        details: error.message,
       });
     }
   }
@@ -501,7 +524,7 @@ export async function getFreeBusyInfo(req: Request, res: Response) {
 // FIXED: New function to get available time slots
 export async function getAvailableTimeSlots(req: Request, res: Response) {
   try {
-    const tenantId = req.body.tenantId
+    const tenantId = req.body.tenantId;
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -511,7 +534,7 @@ export async function getAvailableTimeSlots(req: Request, res: Response) {
       startTime = "09:00",
       endTime = "17:00",
       duration = "60", // minutes
-      calendarId = "primary"
+      calendarId = "primary",
     } = req.query;
 
     if (!date) {
@@ -530,10 +553,11 @@ export async function getAvailableTimeSlots(req: Request, res: Response) {
       orderBy: "startTime",
     });
 
-    const busySlots = events.data.items?.map(event => ({
-      start: new Date(event.start?.dateTime || event.start?.date || ''),
-      end: new Date(event.end?.dateTime || event.end?.date || ''),
-    })) || [];
+    const busySlots =
+      events.data.items?.map((event) => ({
+        start: new Date(event.start?.dateTime || event.start?.date || ""),
+        end: new Date(event.end?.dateTime || event.end?.date || ""),
+      })) || [];
 
     // Generate available slots
     const availableSlots = [];
@@ -543,10 +567,11 @@ export async function getAvailableTimeSlots(req: Request, res: Response) {
     while (currentTime.getTime() + slotDuration <= endOfDay.getTime()) {
       const slotEnd = new Date(currentTime.getTime() + slotDuration);
 
-      const isAvailable = !busySlots.some(busy =>
-        (currentTime >= busy.start && currentTime < busy.end) ||
-        (slotEnd > busy.start && slotEnd <= busy.end) ||
-        (currentTime <= busy.start && slotEnd >= busy.end)
+      const isAvailable = !busySlots.some(
+        (busy) =>
+          (currentTime >= busy.start && currentTime < busy.end) ||
+          (slotEnd > busy.start && slotEnd <= busy.end) ||
+          (currentTime <= busy.start && slotEnd >= busy.end)
       );
 
       if (isAvailable) {
@@ -559,14 +584,14 @@ export async function getAvailableTimeSlots(req: Request, res: Response) {
       }
 
       // Move to next slot (15-minute intervals)
-      currentTime = new Date(currentTime.getTime() + (15 * 60000));
+      currentTime = new Date(currentTime.getTime() + 15 * 60000);
     }
 
     res.json({
       date,
       availableSlots,
       total: availableSlots.length,
-      busySlots: busySlots.length
+      busySlots: busySlots.length,
     });
   } catch (error: any) {
     console.error("Error getting available time slots:", error);
@@ -579,7 +604,7 @@ export async function getAvailableTimeSlots(req: Request, res: Response) {
     } else {
       res.status(500).json({
         error: "Failed to get available time slots",
-        details: error.message
+        details: error.message,
       });
     }
   }
@@ -588,7 +613,7 @@ export async function getAvailableTimeSlots(req: Request, res: Response) {
 // FIXED: New function to create recurring events
 export async function createRecurringEvent(req: Request, res: Response) {
   try {
-    const tenantId = req.body.tenantId
+    const tenantId = req.body.tenantId;
     const client = await getAuthorizedClient(tenantId);
 
     const calendar = google.calendar({ version: "v3", auth: client });
@@ -606,20 +631,24 @@ export async function createRecurringEvent(req: Request, res: Response) {
       until, // End date
       byDay, // For weekly: ['MO', 'WE', 'FR']
       timeZone = "Asia/Jakarta",
-      calendarId = "primary"
+      calendarId = "primary",
     } = req.body;
 
     if (!summary || !start || !end) {
       return res.status(400).json({
-        error: "Missing required fields: summary, start, end"
+        error: "Missing required fields: summary, start, end",
       });
     }
 
     let recurrenceRule = `FREQ=${frequency};INTERVAL=${interval}`;
 
     if (count) recurrenceRule += `;COUNT=${count}`;
-    if (until) recurrenceRule += `;UNTIL=${new Date(until).toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
-    if (byDay && frequency === 'WEEKLY') recurrenceRule += `;BYDAY=${byDay.join(',')}`;
+    if (until)
+      recurrenceRule += `;UNTIL=${
+        new Date(until).toISOString().replace(/[-:]/g, "").split(".")[0]
+      }Z`;
+    if (byDay && frequency === "WEEKLY")
+      recurrenceRule += `;BYDAY=${byDay.join(",")}`;
 
     const eventResource = {
       summary,
@@ -675,7 +704,7 @@ export async function createRecurringEvent(req: Request, res: Response) {
     } else {
       res.status(500).json({
         error: "Failed to create recurring event",
-        details: error.message
+        details: error.message,
       });
     }
   }
