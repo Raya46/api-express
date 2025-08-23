@@ -72,6 +72,65 @@ async function getAuthorizedClient(tenantId: string) {
   }
 }
 
+// Helper function to normalize attendees
+function normalizeAttendees(attendees: any): string[] | undefined {
+  if (!attendees) return undefined;
+  
+  // If it's an empty string, return undefined
+  if (attendees === "" || attendees === null) return undefined;
+  
+  // If it's already an array, return it
+  if (Array.isArray(attendees)) {
+    return attendees.filter(email => email && email.trim() !== "");
+  }
+  
+  // If it's a string, try to parse it
+  if (typeof attendees === "string") {
+    // Try to parse as JSON first
+    try {
+      const parsed = JSON.parse(attendees);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(email => email && email.trim() !== "");
+      }
+    } catch (e) {
+      // Not JSON, treat as comma-separated string
+      const emails = attendees.split(",").map(email => email.trim()).filter(email => email !== "");
+      return emails.length > 0 ? emails : undefined;
+    }
+  }
+  
+  return undefined;
+}
+
+// Helper function to normalize reminders
+function normalizeReminders(reminders: any) {
+  if (!reminders || reminders === "" || reminders === null) {
+    return { useDefault: true };
+  }
+  
+  if (Array.isArray(reminders)) {
+    return {
+      useDefault: false,
+      overrides: reminders
+    };
+  }
+  
+  if (typeof reminders === "string") {
+    try {
+      const parsed = JSON.parse(reminders);
+      if (Array.isArray(parsed)) {
+        return {
+          useDefault: false,
+          overrides: parsed
+        };
+      }
+    } catch (e) {
+      // Invalid JSON, use default
+    }
+  }
+  
+  return { useDefault: true };
+}
 
 export async function createCalendarEvent(req: Request, res: Response) {
   try {
@@ -86,8 +145,8 @@ export async function createCalendarEvent(req: Request, res: Response) {
       start,
       end,
       location,
-      attendees,
-      reminders,
+      attendees: rawAttendees,
+      reminders: rawReminders,
       visibility = "default",
       timeZone = "Asia/Jakarta"
     } = req.body;
@@ -99,9 +158,12 @@ export async function createCalendarEvent(req: Request, res: Response) {
       });
     }
 
-    const event = {
+    // FIXED: Normalize attendees and reminders
+    const attendees = normalizeAttendees(rawAttendees);
+    const reminders = normalizeReminders(rawReminders);
+
+    const event: any = {
       summary,
-      description,
       location,
       start: {
         dateTime: start,
@@ -111,19 +173,25 @@ export async function createCalendarEvent(req: Request, res: Response) {
         dateTime: end,
         timeZone,
       },
-      attendees: attendees?.map((email: string) => ({ email })),
-      reminders: reminders ? {
-        useDefault: false,
-        overrides: reminders
-      } : { useDefault: true },
+      reminders,
       visibility,
     };
+
+    // Only add description if it's not empty
+    if (description && description.trim() !== "") {
+      event.description = description;
+    }
+
+    // Only add attendees if there are any
+    if (attendees && attendees.length > 0) {
+      event.attendees = attendees.map((email: string) => ({ email }));
+    }
 
     const calendarId = req.params.calendarId || "primary";
     const result = await calendar.events.insert({
       calendarId,
       requestBody: event,
-      sendUpdates: "all", // Send notifications to attendees
+      sendUpdates: attendees && attendees.length > 0 ? "all" : "none", // Only send updates if there are attendees
     });
 
     // FIXED: Save to database
@@ -138,7 +206,7 @@ export async function createCalendarEvent(req: Request, res: Response) {
         calendar_id: calendarId,
         user_id: tenantId,
         status: result.data.status,
-        attendees: attendees ? JSON.stringify(attendees) : null,
+        attendees: attendees && attendees.length > 0 ? JSON.stringify(attendees) : null,
         created_at: new Date().toISOString(),
       });
     } catch (dbError) {
@@ -146,7 +214,11 @@ export async function createCalendarEvent(req: Request, res: Response) {
       // Don't fail the request if DB save fails
     }
 
-    res.status(201).json(result.data);
+    res.status(201).json({
+      success: true,
+      data: result.data,
+      message: "Event created successfully"
+    });
   } catch (error: any) {
     console.error("Error creating event:", error);
 
@@ -164,7 +236,7 @@ export async function createCalendarEvent(req: Request, res: Response) {
   }
 }
 
-// FIXED: New function to update calendar event
+// FIXED: Update function with same normalization
 export async function updateCalendarEvent(req: Request, res: Response) {
   try {
     const tenantId = req.body.tenantId
@@ -180,8 +252,8 @@ export async function updateCalendarEvent(req: Request, res: Response) {
       start,
       end,
       location,
-      attendees,
-      reminders,
+      attendees: rawAttendees,
+      reminders: rawReminders,
       visibility,
       timeZone = "Asia/Jakarta"
     } = req.body;
@@ -189,7 +261,9 @@ export async function updateCalendarEvent(req: Request, res: Response) {
     const eventUpdate: any = {};
 
     if (summary) eventUpdate.summary = summary;
-    if (description !== undefined) eventUpdate.description = description;
+    if (description !== undefined) {
+      eventUpdate.description = description.trim() !== "" ? description : "";
+    }
     if (location !== undefined) eventUpdate.location = location;
     if (start) {
       eventUpdate.start = { dateTime: start, timeZone };
@@ -197,22 +271,29 @@ export async function updateCalendarEvent(req: Request, res: Response) {
     if (end) {
       eventUpdate.end = { dateTime: end, timeZone };
     }
-    if (attendees) {
-      eventUpdate.attendees = attendees.map((email: string) => ({ email }));
+    
+    // FIXED: Handle attendees properly
+    if (rawAttendees !== undefined) {
+      const attendees = normalizeAttendees(rawAttendees);
+      if (attendees && attendees.length > 0) {
+        eventUpdate.attendees = attendees.map((email: string) => ({ email }));
+      } else {
+        eventUpdate.attendees = [];
+      }
     }
-    if (reminders) {
-      eventUpdate.reminders = {
-        useDefault: false,
-        overrides: reminders
-      };
+    
+    // FIXED: Handle reminders properly
+    if (rawReminders !== undefined) {
+      eventUpdate.reminders = normalizeReminders(rawReminders);
     }
+    
     if (visibility) eventUpdate.visibility = visibility;
 
     const result = await calendar.events.update({
       calendarId,
       eventId,
       requestBody: eventUpdate,
-      sendUpdates: "all",
+      sendUpdates: eventUpdate.attendees && eventUpdate.attendees.length > 0 ? "all" : "none",
     });
 
     // Update in database
@@ -226,7 +307,10 @@ export async function updateCalendarEvent(req: Request, res: Response) {
       if (location !== undefined) updateData.location = location;
       if (start) updateData.start_time = start;
       if (end) updateData.end_time = end;
-      if (attendees) updateData.attendees = JSON.stringify(attendees);
+      if (rawAttendees !== undefined) {
+        const attendees = normalizeAttendees(rawAttendees);
+        updateData.attendees = attendees && attendees.length > 0 ? JSON.stringify(attendees) : null;
+      }
 
       await supabase.from("events")
         .update(updateData)
@@ -236,7 +320,11 @@ export async function updateCalendarEvent(req: Request, res: Response) {
       console.error("Database update error:", dbError);
     }
 
-    res.json(result.data);
+    res.json({
+      success: true,
+      data: result.data,
+      message: "Event updated successfully"
+    });
   } catch (error: any) {
     console.error("Error updating event:", error);
 
@@ -280,7 +368,10 @@ export async function deleteCalendarEvent(req: Request, res: Response) {
       console.error("Database delete error:", dbError);
     }
 
-    res.status(204).send();
+    res.json({
+      success: true,
+      message: "Event deleted successfully"
+    });
   } catch (error: any) {
     console.error("Error deleting event:", error);
 
@@ -336,7 +427,10 @@ export async function getCalendarEvent(req: Request, res: Response) {
       visibility: event.visibility,
     };
 
-    res.json(formattedEvent);
+    res.json({
+      success: true,
+      data: formattedEvent
+    });
   } catch (error: any) {
     console.error("Error fetching event:", error);
 
@@ -411,11 +505,14 @@ async function getCalendarEventsInternal(req: Request, res: Response, calendarId
     })) || [];
 
     res.json({
-      events,
-      total: events.length,
-      timeZone: result.data.timeZone,
-      nextPageToken: result.data.nextPageToken,
-      nextSyncToken: result.data.nextSyncToken,
+      success: true,
+      data: {
+        events,
+        total: events.length,
+        timeZone: result.data.timeZone,
+        nextPageToken: result.data.nextPageToken,
+        nextSyncToken: result.data.nextSyncToken,
+      }
     });
   } catch (error: any) {
     console.error("Error fetching calendar events:", error);
@@ -480,7 +577,10 @@ export async function getFreeBusyInfo(req: Request, res: Response) {
       requestBody: freeBusyQuery
     });
 
-    res.json(result.data);
+    res.json({
+      success: true,
+      data: result.data
+    });
   } catch (error: any) {
     console.error("Error fetching free/busy info:", error);
 
@@ -563,10 +663,13 @@ export async function getAvailableTimeSlots(req: Request, res: Response) {
     }
 
     res.json({
-      date,
-      availableSlots,
-      total: availableSlots.length,
-      busySlots: busySlots.length
+      success: true,
+      data: {
+        date,
+        availableSlots,
+        total: availableSlots.length,
+        busySlots: busySlots.length
+      }
     });
   } catch (error: any) {
     console.error("Error getting available time slots:", error);
@@ -599,7 +702,7 @@ export async function createRecurringEvent(req: Request, res: Response) {
       start,
       end,
       location,
-      attendees,
+      attendees: rawAttendees,
       frequency = "WEEKLY", // DAILY, WEEKLY, MONTHLY, YEARLY
       interval = 1,
       count, // Number of occurrences
@@ -615,15 +718,17 @@ export async function createRecurringEvent(req: Request, res: Response) {
       });
     }
 
+    // FIXED: Handle attendees properly
+    const attendees = normalizeAttendees(rawAttendees);
+
     let recurrenceRule = `FREQ=${frequency};INTERVAL=${interval}`;
 
     if (count) recurrenceRule += `;COUNT=${count}`;
     if (until) recurrenceRule += `;UNTIL=${new Date(until).toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
     if (byDay && frequency === 'WEEKLY') recurrenceRule += `;BYDAY=${byDay.join(',')}`;
 
-    const eventResource = {
+    const eventResource: any = {
       summary,
-      description,
       location,
       start: {
         dateTime: start,
@@ -633,14 +738,23 @@ export async function createRecurringEvent(req: Request, res: Response) {
         dateTime: end,
         timeZone,
       },
-      attendees: attendees?.map((email: string) => ({ email })),
       recurrence: [`RRULE:${recurrenceRule}`],
     };
+
+    // Only add description if it's not empty
+    if (description && description.trim() !== "") {
+      eventResource.description = description;
+    }
+
+    // Only add attendees if there are any
+    if (attendees && attendees.length > 0) {
+      eventResource.attendees = attendees.map((email: string) => ({ email }));
+    }
 
     const result = await calendar.events.insert({
       calendarId,
       requestBody: eventResource,
-      sendUpdates: "all",
+      sendUpdates: attendees && attendees.length > 0 ? "all" : "none",
     });
 
     // Save to database with recurrence info
@@ -655,7 +769,7 @@ export async function createRecurringEvent(req: Request, res: Response) {
         calendar_id: calendarId,
         user_id: tenantId,
         status: result.data.status,
-        attendees: attendees ? JSON.stringify(attendees) : null,
+        attendees: attendees && attendees.length > 0 ? JSON.stringify(attendees) : null,
         recurrence: recurrenceRule,
         created_at: new Date().toISOString(),
       });
@@ -663,7 +777,11 @@ export async function createRecurringEvent(req: Request, res: Response) {
       console.error("Database save error:", dbError);
     }
 
-    res.status(201).json(result.data);
+    res.status(201).json({
+      success: true,
+      data: result.data,
+      message: "Recurring event created successfully"
+    });
   } catch (error: any) {
     console.error("Error creating recurring event:", error);
 
