@@ -5,6 +5,7 @@ import { supabase } from "../config/supabase";
 import crypto from "crypto";
 import { AuthController } from "./authController";
 import { oauth2Client, scopes } from "../config/google";
+import { UrlShortenerService } from "../services/urlShortenerService";
 
 export class TelegramAuthController {
   
@@ -49,9 +50,13 @@ export class TelegramAuthController {
         state: state,
       });
 
+      // Shorten the auth URL using TinyURL
+      const shortenedAuthUrl = await UrlShortenerService.shortenAuthUrl(authUrl, telegram_chat_id);
+
       res.json({
         success: true,
-        auth_url: authUrl,
+        auth_url: shortenedAuthUrl,
+        original_url: authUrl, // Keep original for debugging
         session_token: sessionToken,
         expires_at: expiresAt
       });

@@ -1,23 +1,8 @@
 import { Router } from "express";
 import { AuthController } from "../controllers/authController";
-import {
-  createCalendar,
-  getCalendars,
-  updateCalendar,
-  deleteCalendar,
-} from "../controllers/calendarController";
+import { CalendarController } from "../controllers/calendarController";
 
-import {
-  createCalendarEvent,
-  getCalendarEvents,
-  getPrimaryCalendarEvents,
-  getCalendarEvent,
-  updateCalendarEvent,
-  deleteCalendarEvent,
-  getFreeBusyInfo,
-  getAvailableTimeSlots,
-  createRecurringEvent,
-} from "../controllers/eventController";
+import { EventController } from "../controllers/eventController";
 import { requireGoogleAuth, telegramAuthMiddleware } from "../middleware/auth";
 import { TelegramAuthController } from "../controllers/telegramController";
 
@@ -43,30 +28,30 @@ router.post("/google/disconnect", requireGoogleAuth, AuthController.disconnectGo
 router.post("/telegram/disconnect", requireGoogleAuth, TelegramAuthController.disconnectTelegram);
 
 // Calendar management routes (require Google auth)
-router.post("/calendars", telegramAuthMiddleware, createCalendar);
-router.get("/calendars", telegramAuthMiddleware, getCalendars);
-router.put("/calendars/:calendarId", telegramAuthMiddleware, updateCalendar);
-router.delete("/calendars/:calendarId", telegramAuthMiddleware, deleteCalendar);
+router.post("/calendars", telegramAuthMiddleware, CalendarController.createCalendar);
+router.get("/calendars", telegramAuthMiddleware, CalendarController.getCalendars);
+router.put("/calendars/:calendarId", telegramAuthMiddleware, CalendarController.updateCalendar);
+router.delete("/calendars/:calendarId", telegramAuthMiddleware, CalendarController.deleteCalendar);
 
 // Event management routes for specific calendars (require Google auth)
-router.post("/calendars/:calendarId/events", telegramAuthMiddleware, createCalendarEvent);
-router.get("/calendars/:calendarId/events", telegramAuthMiddleware, getCalendarEvents);
-router.get("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, getCalendarEvent);
-router.put("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, updateCalendarEvent);
-router.delete("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, deleteCalendarEvent);
+router.post("/calendars/:calendarId/events", telegramAuthMiddleware, EventController.createCalendarEvent);
+router.get("/calendars/:calendarId/events", telegramAuthMiddleware, EventController.getCalendarEvents);
+router.get("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, EventController.getCalendarEvent);
+router.put("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, EventController.updateCalendarEvent);
+router.delete("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, EventController.deleteCalendarEvent);
 
 // Event management routes for primary calendar (require Google auth)
-router.post("/events", telegramAuthMiddleware, createCalendarEvent);
-router.get("/events", telegramAuthMiddleware, getPrimaryCalendarEvents);
-router.get("/events/:eventId", telegramAuthMiddleware, getCalendarEvent);
-router.put("/events/:eventId", telegramAuthMiddleware, updateCalendarEvent);
-router.delete("/events/:eventId", telegramAuthMiddleware, deleteCalendarEvent);
+router.post("/events", telegramAuthMiddleware, EventController.createCalendarEvent);
+router.get("/events", telegramAuthMiddleware, EventController.getPrimaryCalendarEvents);
+router.get("/events/:eventId", telegramAuthMiddleware, EventController.getCalendarEvent);
+router.put("/events/:eventId", telegramAuthMiddleware, EventController.updateCalendarEvent);
+router.delete("/events/:eventId", telegramAuthMiddleware, EventController.deleteCalendarEvent);
 
 // Recurring events (require Google auth)
-router.post("/events/recurring", telegramAuthMiddleware, createRecurringEvent);
+router.post("/events/recurring", telegramAuthMiddleware, EventController.createRecurringEvent);
 
 // Scheduling and availability (require Google auth)
-router.get("/freebusy", telegramAuthMiddleware, getFreeBusyInfo);
-router.get("/availability", telegramAuthMiddleware, getAvailableTimeSlots);
+router.get("/freebusy", telegramAuthMiddleware, EventController.getFreeBusyInfo);
+router.get("/availability", telegramAuthMiddleware, EventController.getAvailableTimeSlots);
 
 export default router;
