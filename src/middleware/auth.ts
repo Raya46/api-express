@@ -48,8 +48,8 @@ export const authenticateToken = async (
     let user = null;
     let error = null;
 
-    // Check if this is a ChatGPT user (has email in decoded token)
-    if (decoded.email) {
+    // Check if this is a GPT Action internal token (has user_type: "chatgpt")
+    if (decoded.user_type === 'chatgpt') {
       // Verify ChatGPT user exists in database
       const result = await supabase
         .from('users')
@@ -59,6 +59,32 @@ export const authenticateToken = async (
 
       user = result.data;
       error = result.error;
+
+      if (user) {
+        user = {
+          ...user,
+          user_type: 'chatgpt' as const
+        };
+      }
+    }
+    // Check if this is a ChatGPT user (has email in decoded token)
+    else if (decoded.email) {
+      // Verify ChatGPT user exists in database
+      const result = await supabase
+        .from('users')
+        .select('id, email, full_name')
+        .eq('id', decoded.userId)
+        .single();
+
+      user = result.data;
+      error = result.error;
+
+      if (user) {
+        user = {
+          ...user,
+          user_type: 'chatgpt' as const
+        };
+      }
     } else {
       // This is a Telegram user (no email in decoded token)
       // Verify Telegram user exists in database

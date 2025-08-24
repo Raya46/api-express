@@ -14,6 +14,9 @@ router.post("/auth/logout", AuthController.logout);
 router.get("/auth/google", AuthController.googleAuth);
 router.get("/auth/me", AuthController.getMe);
 
+// GPT Actions OAuth 2.0 token exchange (public)
+router.post("/auth/token", AuthController.exchangeCodeForToken);
+
 // Telegram Auth routes (public) - MUST be before requireGoogleAuth middleware
 router.post("/telegram/oauth/generate", TelegramController.generateTelegramOAuthUrl);
 router.get("/telegram/check/:telegram_chat_id", TelegramController.checkTelegramAuth);
@@ -27,7 +30,7 @@ router.get("/google/status", requireGoogleAuth, AuthController.testGoogleConnect
 router.post("/google/disconnect", requireGoogleAuth, AuthController.disconnectGoogle);
 router.post("/telegram/disconnect", requireGoogleAuth, TelegramController.disconnectTelegram);
 
-// Calendar management routes for ChatGPT users (require Google auth)
+// Calendar management routes for ChatGPT users (OAuth 2.0 - GPT manages tokens)
 router.post("/gpt/calendars", requireGoogleAuth, CalendarController.createCalendar);
 router.get("/gpt/calendars", requireGoogleAuth, CalendarController.getCalendars);
 router.put("/gpt/calendars/:calendarId", requireGoogleAuth, CalendarController.updateCalendar);
@@ -39,7 +42,7 @@ router.get("/calendars", telegramAuthMiddleware, CalendarController.getCalendars
 router.put("/calendars/:calendarId", telegramAuthMiddleware, CalendarController.updateCalendar);
 router.delete("/calendars/:calendarId", telegramAuthMiddleware, CalendarController.deleteCalendar);
 
-// Event management routes for ChatGPT users (require Google auth)
+// Event management routes for ChatGPT users (OAuth 2.0 - GPT manages tokens)
 router.post("/gpt/calendars/:calendarId/events", requireGoogleAuth, EventController.createCalendarEvent);
 router.get("/gpt/calendars/:calendarId/events", requireGoogleAuth, EventController.getCalendarEvents);
 router.get("/gpt/calendars/:calendarId/events/:eventId", requireGoogleAuth, EventController.getCalendarEvent);
@@ -53,7 +56,7 @@ router.get("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, Eve
 router.put("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, EventController.updateCalendarEvent);
 router.delete("/calendars/:calendarId/events/:eventId", telegramAuthMiddleware, EventController.deleteCalendarEvent);
 
-// Primary calendar event routes for ChatGPT users (require Google auth)
+// Primary calendar event routes for ChatGPT users (OAuth 2.0 - GPT manages tokens)
 router.post("/gpt/events", requireGoogleAuth, EventController.createCalendarEvent);
 router.get("/gpt/events", requireGoogleAuth, EventController.getPrimaryCalendarEvents);
 router.get("/gpt/events/:eventId", requireGoogleAuth, EventController.getCalendarEvent);
@@ -67,13 +70,13 @@ router.get("/events/:eventId", telegramAuthMiddleware, EventController.getCalend
 router.put("/events/:eventId", telegramAuthMiddleware, EventController.updateCalendarEvent);
 router.delete("/events/:eventId", telegramAuthMiddleware, EventController.deleteCalendarEvent);
 
-// Recurring events for ChatGPT users (require Google auth)
+// Recurring events for ChatGPT users (OAuth 2.0 - GPT manages tokens)
 router.post("/gpt/events/recurring", requireGoogleAuth, EventController.createRecurringEvent);
 
 // Recurring events for Telegram users (require Telegram auth)
 router.post("/events/recurring", telegramAuthMiddleware, EventController.createRecurringEvent);
 
-// Scheduling and availability for ChatGPT users (require Google auth)
+// Scheduling and availability for ChatGPT users (OAuth 2.0 - GPT manages tokens)
 router.get("/gpt/freebusy", requireGoogleAuth, EventController.getFreeBusyInfo);
 router.get("/gpt/availability", requireGoogleAuth, EventController.getAvailableTimeSlots);
 

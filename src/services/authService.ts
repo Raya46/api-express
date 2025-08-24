@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import jwt from "jsonwebtoken";
 import { supabase } from "../config/supabase";
+import { UrlShortenerService } from "./urlShortenerService";
 
 export interface GoogleUser {
   id: string;
@@ -39,7 +40,10 @@ export class AuthService {
   /**
    * Generate Google OAuth URL for ChatGPT users
    */
-  static generateGoogleAuthUrl(userId?: string) {
+  static async generateGoogleAuthUrl(userId?: string): Promise<{
+    auth_url: string;
+    original_url: string;
+  }> {
     // Create new OAuth2 client instance for this request
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -57,7 +61,7 @@ export class AuthService {
     // Add state parameter to track user and force approval
     const state = userId ? JSON.stringify({ userId }) : '';
 
-    const url = oauth2Client.generateAuthUrl({
+    const originalUrl = oauth2Client.generateAuthUrl({
       access_type: "offline",
       scope: scopes,
       include_granted_scopes: true,
@@ -65,7 +69,13 @@ export class AuthService {
       state: state, // Track the user making the request
     });
 
-    return url;
+    // Shorten the auth URL using TinyURL (like Telegram)
+    const shortenedAuthUrl = await UrlShortenerService.shortenAuthUrl(originalUrl, userId);
+
+    return {
+      auth_url: shortenedAuthUrl,
+      original_url: originalUrl
+    };
   }
 
   static async handleGoogleOAuthCallback(code: string, state?: string): Promise<AuthResult> {

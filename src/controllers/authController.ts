@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import jwt from "jsonwebtoken";
 import { AuthService } from "../services/authService";
 
 export class AuthController {
@@ -20,10 +21,10 @@ export class AuthController {
   /**
    * Generate Google OAuth URL for ChatGPT users
    */
-  static googleAuth(req: Request, res: Response) {
+  static async googleAuth(req: Request, res: Response) {
     try {
-      const url = AuthService.generateGoogleAuthUrl(req.user?.id);
-      res.redirect(url);
+      const { auth_url } = await AuthService.generateGoogleAuthUrl(req.user?.id);
+      res.redirect(auth_url);
     } catch (error: any) {
       console.error("Error in googleAuth:", error);
       res.status(500).json({ error: error.message });
@@ -62,6 +63,49 @@ export class AuthController {
     } catch (error: any) {
       console.error("Error in oauthCallback:", error);
       res.status(500).send(`Authentication failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Exchange authorization code for internal JWT token (for GPT Actions)
+   */
+  static async exchangeCodeForToken(req: Request, res: Response) {
+    try {
+      const { code, client_id, client_secret } = req.body;
+
+      // Validate GPT Action client credentials
+      if (client_id !== process.env.GOOGLE_CLIENT_ID || client_secret !== process.env.GOOGLE_CLIENT_SECRET) {
+        return res.status(401).json({ error: 'Invalid client credentials' });
+      }
+
+      // Exchange the authorization code for Google tokens
+      const result = await AuthService.handleGoogleOAuthCallback(code);
+
+      if (!result.success || !result.user) {
+        return res.status(400).json({ error: 'invalid_grant' });
+      }
+
+      // Generate internal JWT token for GPT (not exposing Google tokens)
+      const internalToken = jwt.sign(
+        {
+          userId: result.user.id,
+          email: result.user.email,
+          user_type: "chatgpt"
+        },
+        process.env.JWT_SECRET || "fallback_secret",
+        { expiresIn: '1h' } // 1 hour expiration
+      );
+
+      // Return OAuth 2.0 compliant response
+      res.json({
+        access_token: internalToken,
+        token_type: 'Bearer',
+        expires_in: 3600, // 1 hour in seconds
+      });
+
+    } catch (error: any) {
+      console.error("Error exchanging code for token:", error);
+      res.status(400).json({ error: 'invalid_grant' });
     }
   }
 
