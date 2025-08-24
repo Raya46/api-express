@@ -1,5 +1,7 @@
 import { google } from "googleapis";
 import { supabase } from "../config/supabase";
+import { TelegramAuthController } from "../controllers/telegramController";
+import { UserNotLinkedError, GoogleAuthRequiredError, CalendarNotFoundError } from "../types/errors";
 
 export interface CalendarData {
   summary: string;
@@ -236,6 +238,75 @@ export class CalendarService {
       return formattedCalendar;
     } catch (error: any) {
       console.error("Error fetching calendar:", error);
+      throw error;
+    }
+  }
+
+  // New methods for GPTs integration (using telegram chat ID)
+  static async createCalendarByTelegramChatId(telegramChatId: string, calendarData: CalendarData) {
+    try {
+      // Get user by telegram chat ID
+      const user = await TelegramAuthController.getUserByTelegramId(parseInt(telegramChatId));
+      const tenantId = user.id;
+
+      // Use existing method with the tenant ID
+      return await this.createCalendar(tenantId, calendarData);
+    } catch (error: any) {
+      console.error("Error creating calendar by telegram chat ID:", error);
+
+      // Re-throw with custom error types for better handling
+      if (error.message.includes("not found")) {
+        throw new UserNotLinkedError();
+      } else if (error.message.includes("authenticate") || error.code === 401) {
+        throw new GoogleAuthRequiredError();
+      }
+
+      throw error;
+    }
+  }
+
+  static async getCalendarsByTelegramChatId(telegramChatId: string) {
+    try {
+      // Get user by telegram chat ID
+      const user = await TelegramAuthController.getUserByTelegramId(parseInt(telegramChatId));
+      const tenantId = user.id;
+
+      // Use existing method with the tenant ID
+      return await this.getCalendars(tenantId);
+    } catch (error: any) {
+      console.error("Error fetching calendars by telegram chat ID:", error);
+
+      // Re-throw with custom error types for better handling
+      if (error.message.includes("not found")) {
+        throw new UserNotLinkedError();
+      } else if (error.message.includes("authenticate") || error.code === 401) {
+        throw new GoogleAuthRequiredError();
+      }
+
+      throw error;
+    }
+  }
+
+  static async getCalendarByTelegramChatId(telegramChatId: string, calendarId: string) {
+    try {
+      // Get user by telegram chat ID
+      const user = await TelegramAuthController.getUserByTelegramId(parseInt(telegramChatId));
+      const tenantId = user.id;
+
+      // Use existing method with the tenant ID
+      return await this.getCalendar(tenantId, calendarId);
+    } catch (error: any) {
+      console.error("Error fetching calendar by telegram chat ID:", error);
+
+      // Re-throw with custom error types for better handling
+      if (error.message.includes("not found")) {
+        throw new UserNotLinkedError();
+      } else if (error.message.includes("authenticate") || error.code === 401) {
+        throw new GoogleAuthRequiredError();
+      } else if (error.code === 404) {
+        throw new CalendarNotFoundError();
+      }
+
       throw error;
     }
   }

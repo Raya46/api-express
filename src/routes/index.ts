@@ -33,6 +33,11 @@ router.get("/calendars", telegramAuthMiddleware, CalendarController.getCalendars
 router.put("/calendars/:calendarId", telegramAuthMiddleware, CalendarController.updateCalendar);
 router.delete("/calendars/:calendarId", telegramAuthMiddleware, CalendarController.deleteCalendar);
 
+// GPTs integration routes (no auth middleware - telegram chat ID from body)
+router.post("/gpts/calendars", CalendarController.createCalendarByTelegramChatId);
+router.post("/gpts/calendars/list", CalendarController.getCalendarsByTelegramChatId);
+router.post("/gpts/calendars/:calendarId", CalendarController.getCalendarByTelegramChatId);
+
 // Event management routes for specific calendars (require Google auth)
 router.post("/calendars/:calendarId/events", telegramAuthMiddleware, EventController.createCalendarEvent);
 router.get("/calendars/:calendarId/events", telegramAuthMiddleware, EventController.getCalendarEvents);
