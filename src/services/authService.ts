@@ -68,9 +68,6 @@ export class AuthService {
     return url;
   }
 
-  /**
-   * Handle Google OAuth callback for ChatGPT users
-   */
   static async handleGoogleOAuthCallback(code: string, state?: string): Promise<AuthResult> {
     try {
       // Check if this is a Telegram OAuth request
