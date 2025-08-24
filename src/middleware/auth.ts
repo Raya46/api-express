@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabase';
 import { AuthController } from '../controllers/authController';
-import { TelegramAuthController } from '../controllers/telegramController';
+import { TelegramController } from '../controllers/telegramController';
 
 // Extend Express Request interface to include user and hasGoogleAuth
 declare global {
@@ -272,11 +272,13 @@ export const telegramAuthMiddleware = async (req: Request, res: Response, next: 
   }
 
   try {
-    const user = await TelegramAuthController.getUserByTelegramId(parseInt(telegramChatId as string));
+    const user = await TelegramController.getUserByTelegramId(parseInt(telegramChatId as string));
 
     // Add user type to identify this as a Telegram user
     req.user = {
       ...user,
+      full_name: user.full_name || '',
+      username: user.username || undefined,
       user_type: 'telegram' as const
     };
 
