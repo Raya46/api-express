@@ -80,12 +80,52 @@ static async oauthCallback(req: Request, res: Response) {
         <html>
         <head>
           <title>Authorization Successful</title>
-          <style>/* ... your success CSS ... */</style>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              background-color: #f0f8f0;
+              margin: 0;
+              padding: 20px;
+              text-align: center;
+            }
+            .container {
+              max-width: 600px;
+              margin: 50px auto;
+              background: white;
+              padding: 30px;
+              border-radius: 10px;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .success {
+              color: #28a745;
+              font-size: 24px;
+              margin-bottom: 20px;
+            }
+            .info {
+              color: #333;
+              font-size: 16px;
+              margin-bottom: 30px;
+            }
+            .telegram-link {
+              display: inline-block;
+              background-color: #0088cc;
+              color: white;
+              padding: 12px 24px;
+              text-decoration: none;
+              border-radius: 5px;
+              font-weight: bold;
+              transition: background-color 0.3s;
+            }
+            .telegram-link:hover {
+              background-color: #006699;
+            }
+          </style>
         </head>
         <body>
           <div class="container">
             <div class="success">✅ Authorization Successful!</div>
             <div class="info">Your Google account is now linked. You can return to Telegram.</div>
+            <a href="https://t.me/proj_exp_bot" class="telegram-link">🔙 Return to Telegram Bot</a>
           </div>
         </body>
         </html>

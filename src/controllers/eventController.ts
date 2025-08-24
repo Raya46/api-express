@@ -6,34 +6,20 @@ export class EventController {
     try {
       const tenantId = req.user?.id;
       if (!tenantId) {
-        return res.status(401).json({ error: "User not authenticated" });
+        return res.status(401).json({
+          error: "User not authenticated",
+          success: false
+        });
       }
 
       const calendarId = req.params.calendarId || "primary";
+      console.log("Creating event for calendar:", calendarId);
+      console.log("Request body:", JSON.stringify(req.body, null, 2));
 
-      const {
-        summary,
-        description,
-        start,
-        end,
-        location,
-        attendees,
-        reminders,
-        visibility = "default",
-        timeZone = "Asia/Jakarta"
-      } = req.body;
+      // Enhanced request body parsing with multiple format support
+      const eventData = this.parseEventData(req.body);
 
-      const eventData: EventData = {
-        summary,
-        description,
-        start: start.dateTime,
-        end: end.dateTime,
-        location,
-        attendees,
-        reminders,
-        visibility,
-        timeZone
-      };
+      console.log("Parsed event data:", JSON.stringify(eventData, null, 2));
 
       const result = await EventService.createEvent(tenantId, eventData, calendarId);
 
@@ -43,15 +29,32 @@ export class EventController {
         message: "Event created successfully"
       });
     } catch (error: any) {
-      console.error("Error creating event:", error);
+      console.error("Controller error creating event:", error);
 
-      if (error.message.includes("authenticate") || error.code === 401) {
+      // Enhanced error response with more specific error handling
+      if (error.message.includes("authentication") || error.message.includes("permissions")) {
         res.status(401).json({
+          success: false,
           error: "Google authentication required",
+          details: error.message,
           needsAuth: true,
+        });
+      } else if (error.message.includes("Validation failed")) {
+        res.status(400).json({
+          success: false,
+          error: "Validation error",
+          details: error.message
+        });
+      } else if (error.message.includes("Invalid datetime")) {
+        res.status(400).json({
+          success: false,
+          error: "Invalid datetime format",
+          details: error.message,
+          expectedFormat: "ISO 8601 (YYYY-MM-DDTHH:mm:ss+07:00)"
         });
       } else {
         res.status(500).json({
+          success: false,
           error: "Failed to create event",
           details: error.message
         });
@@ -386,5 +389,72 @@ export class EventController {
         });
       }
     }
+  }
+
+  // Enhanced request parsing to handle multiple input formats
+  private static parseEventData(body: any): EventData {
+    const {
+      summary,
+      description,
+      start,
+      end,
+      location,
+      attendees,
+      reminders,
+      visibility = "default",
+      timeZone = "Asia/Jakarta"
+    } = body;
+
+    // Handle different start/end formats
+    let startDateTime: string;
+    let endDateTime: string;
+
+    // Format 1: Direct string
+    if (typeof start === 'string') {
+      startDateTime = start;
+    }
+    // Format 2: Object with dateTime
+    else if (start && typeof start === 'object' && start.dateTime) {
+      startDateTime = start.dateTime;
+    }
+    // Format 3: Object parsed from JSON string (N8N case)
+    else if (typeof start === 'string' && start.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(start);
+        startDateTime = parsed.dateTime || parsed.start?.dateTime;
+      } catch (e) {
+        throw new Error("Invalid start time format");
+      }
+    } else {
+      throw new Error("Start time is required");
+    }
+
+    // Same logic for end time
+    if (typeof end === 'string') {
+      endDateTime = end;
+    } else if (end && typeof end === 'object' && end.dateTime) {
+      endDateTime = end.dateTime;
+    } else if (typeof end === 'string' && end.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(end);
+        endDateTime = parsed.dateTime || parsed.end?.dateTime;
+      } catch (e) {
+        throw new Error("Invalid end time format");
+      }
+    } else {
+      throw new Error("End time is required");
+    }
+
+    return {
+      summary,
+      description,
+      start: startDateTime,
+      end: endDateTime,
+      location,
+      attendees,
+      reminders,
+      visibility,
+      timeZone
+    };
   }
 }

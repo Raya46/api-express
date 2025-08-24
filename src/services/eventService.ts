@@ -4,8 +4,8 @@ import { supabase } from "../config/supabase";
 export interface EventData {
   summary: string;
   description?: string;
-  start: string;
-  end: string;
+  start: string | { dateTime: string; timeZone?: string };
+  end: string | { dateTime: string; timeZone?: string };
   location?: string;
   attendees?: string[];
   reminders?: any;
@@ -151,44 +151,133 @@ export class EventService {
     return { useDefault: true };
   }
 
+  // Enhanced validation method
+  private static validateEventData(eventData: EventData): string[] {
+    const errors: string[] = [];
+
+    if (!eventData.summary?.trim()) {
+      errors.push("summary is required and cannot be empty");
+    }
+
+    if (!eventData.start) {
+      errors.push("start time is required");
+    }
+
+    if (!eventData.end) {
+      errors.push("end time is required");
+    }
+
+    return errors;
+  }
+
+  // Extract datetime string from various input formats
+  private static extractDateTime(timeInput: string | { dateTime: string; timeZone?: string }): string {
+    if (typeof timeInput === 'string') {
+      return timeInput;
+    } else if (timeInput && typeof timeInput === 'object' && timeInput.dateTime) {
+      return timeInput.dateTime;
+    }
+    throw new Error("Invalid time format");
+  }
+
+  // Validate ISO datetime format
+  private static isValidISODateTime(dateTime: string): boolean {
+    try {
+      const date = new Date(dateTime);
+      return date instanceof Date && !isNaN(date.getTime()) && dateTime.includes('T');
+    } catch {
+      return false;
+    }
+  }
+
+  // Enhanced database save with retry logic
+  private static async saveEventToDatabase(eventData: any, calendarId: string, tenantId: string, attendees: string[] | undefined) {
+    try {
+      const { error } = await supabase.from("events").insert({
+        id: eventData.id,
+        summary: eventData.summary,
+        description: eventData.description || null,
+        start_time: eventData.start?.dateTime,
+        end_time: eventData.end?.dateTime,
+        location: eventData.location || null,
+        calendar_id: calendarId,
+        user_id: tenantId,
+        status: eventData.status,
+        attendees: attendees && attendees.length > 0 ? JSON.stringify(attendees) : null,
+        html_link: eventData.htmlLink,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        console.error("Database save error:", error);
+        // Could implement retry logic here if needed
+      }
+    } catch (dbError) {
+      console.error("Database save error:", dbError);
+      // Don't fail the request if DB save fails
+    }
+  }
+
   static async createEvent(tenantId: string, eventData: EventData, calendarId: string = "primary") {
     try {
       const client = await this.getAuthorizedClient(tenantId);
       const calendar = google.calendar({ version: "v3", auth: client });
 
-      // Validate required fields
-      if (!eventData.summary || !eventData.start || !eventData.end) {
-        throw new Error("Missing required fields: summary, start, end");
+      // Enhanced validation with better error messages
+      const validationErrors = this.validateEventData(eventData);
+      if (validationErrors.length > 0) {
+        throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
+      }
+
+      // Normalize and extract datetime values
+      const startDateTime = this.extractDateTime(eventData.start);
+      const endDateTime = this.extractDateTime(eventData.end);
+      const defaultTimeZone = eventData.timeZone || "Asia/Jakarta";
+
+      // Validate datetime format
+      if (!this.isValidISODateTime(startDateTime) || !this.isValidISODateTime(endDateTime)) {
+        throw new Error("Invalid datetime format. Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss+07:00)");
+      }
+
+      // Validate start < end
+      if (new Date(startDateTime) >= new Date(endDateTime)) {
+        throw new Error("End time must be after start time");
       }
 
       // Normalize attendees and reminders
       const attendees = this.normalizeAttendees(eventData.attendees);
       const reminders = this.normalizeReminders(eventData.reminders);
 
+      // Build event object with proper structure
       const event: any = {
-        summary: eventData.summary,
-        location: eventData.location,
+        summary: eventData.summary.trim(),
         start: {
-          dateTime: eventData.start,
-          timeZone: eventData.timeZone || "Asia/Jakarta",
+          dateTime: startDateTime,
+          timeZone: defaultTimeZone,
         },
         end: {
-          dateTime: eventData.end,
-          timeZone: eventData.timeZone || "Asia/Jakarta",
+          dateTime: endDateTime,
+          timeZone: defaultTimeZone,
         },
         reminders,
         visibility: eventData.visibility || "default",
       };
 
-      // Only add description if it's not empty
-      if (eventData.description && eventData.description.trim() !== "") {
-        event.description = eventData.description;
+      // Add optional fields only if they have valid values
+      if (eventData.description?.trim()) {
+        event.description = eventData.description.trim();
       }
 
-      // Only add attendees if there are any
-      if (attendees && attendees.length > 0) {
-        event.attendees = attendees.map((email: string) => ({ email }));
+      if (eventData.location?.trim()) {
+        event.location = eventData.location.trim();
       }
+
+      if (attendees && attendees.length > 0) {
+        event.attendees = attendees.map((email: string) => ({ email: email.trim() }));
+      }
+
+      console.log("Creating event with payload:", JSON.stringify(event, null, 2));
 
       const result = await calendar.events.insert({
         calendarId,
@@ -196,30 +285,34 @@ export class EventService {
         sendUpdates: attendees && attendees.length > 0 ? "all" : "none",
       });
 
-      // Save to database
-      try {
-        await supabase.from("events").insert({
-          id: result.data.id,
-          summary: result.data.summary,
-          description: result.data.description,
-          start_time: result.data.start?.dateTime,
-          end_time: result.data.end?.dateTime,
-          location: result.data.location,
-          calendar_id: calendarId,
-          user_id: tenantId,
-          status: result.data.status,
-          attendees: attendees && attendees.length > 0 ? JSON.stringify(attendees) : null,
-          created_at: new Date().toISOString(),
-        });
-      } catch (dbError) {
-        console.error("Database save error:", dbError);
-        // Don't fail the request if DB save fails
-      }
+      // Enhanced database save with better error handling
+      await this.saveEventToDatabase(result.data, calendarId, tenantId, attendees);
 
-      return result.data;
+      return {
+        id: result.data.id,
+        summary: result.data.summary,
+        description: result.data.description,
+        start: result.data.start,
+        end: result.data.end,
+        location: result.data.location,
+        status: result.data.status,
+        htmlLink: result.data.htmlLink,
+        created: result.data.created,
+        updated: result.data.updated
+      };
     } catch (error: any) {
       console.error("Error creating event:", error);
-      throw error;
+
+      // Enhanced error handling with specific error types
+      if (error.code === 400) {
+        throw new Error(`Google Calendar API error: ${error.message}`);
+      } else if (error.code === 401 || error.code === 403) {
+        throw new Error("Google authentication required or insufficient permissions");
+      } else if (error.message.includes("Validation failed")) {
+        throw error; // Re-throw validation errors as-is
+      } else {
+        throw new Error(`Failed to create event: ${error.message}`);
+      }
     }
   }
 
