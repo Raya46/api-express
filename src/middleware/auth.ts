@@ -287,8 +287,84 @@ export const telegramAuthMiddleware = async (req: Request, res: Response, next: 
       user_type: 'telegram' as const
     };
 
+    // Check Google token validity for Telegram users
+    const userId = req.user.id;
+    const { data: tenantToken, error: tokenError } = await supabase
+      .from('tenant_tokens')
+      .select('access_token, refresh_token, expiry_date')
+      .eq('tenant_id', userId)
+      .single();
+
+    if (tokenError || !tenantToken || !tenantToken.access_token) {
+      return res.status(401).json({
+        error: 'Google authentication required',
+        needsAuth: true,
+        authUrl: `${process.env.BASE_URL}/api/telegram/oauth/generate`
+      });
+    }
+
+    // Check if token is expired (with 5-minute buffer)
+    const isTokenExpired = tenantToken.expiry_date ? new Date() > new Date(new Date(tenantToken.expiry_date).getTime() - (5 * 60 * 1000)) : true;
+
+    if (isTokenExpired) {
+      console.log(`Google token for Telegram user ${userId} requires refresh.`);
+
+      if (!tenantToken.refresh_token) {
+        return res.status(401).json({
+          error: 'Google token expired and no refresh token is available.',
+          needsAuth: true,
+          authUrl: `${process.env.BASE_URL}/api/telegram/oauth/generate`
+        });
+      }
+
+      // Attempt to refresh the token
+      try {
+        const oauth2Client = new google.auth.OAuth2(
+          process.env.GOOGLE_CLIENT_ID,
+          process.env.GOOGLE_CLIENT_SECRET
+        );
+        oauth2Client.setCredentials({ refresh_token: tenantToken.refresh_token });
+
+        const { credentials } = await oauth2Client.refreshAccessToken();
+        const newTokens = credentials;
+
+        console.log('Google token refreshed successfully for Telegram user.');
+
+        // Update the token in tenant_tokens table
+        const updatePayload = {
+          access_token: newTokens.access_token,
+          expiry_date: newTokens.expiry_date ? new Date(newTokens.expiry_date).toISOString() : null,
+          ...(newTokens.refresh_token && { refresh_token: newTokens.refresh_token }),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: updateError } = await supabase
+          .from('tenant_tokens')
+          .update(updatePayload)
+          .eq('tenant_id', userId);
+
+        if (updateError) {
+          console.error('Failed to update refreshed tokens for Telegram user:', updateError);
+          return res.status(401).json({
+            error: 'Failed to refresh Google token. Please re-authenticate.',
+            needsAuth: true,
+            authUrl: `${process.env.BASE_URL}/api/telegram/oauth/generate`
+          });
+        }
+
+      } catch (refreshError: any) {
+        console.error('Failed to refresh Google token for Telegram user:', refreshError.message);
+        return res.status(401).json({
+          error: 'Failed to refresh Google token. Please re-authenticate.',
+          needsAuth: true,
+          authUrl: `${process.env.BASE_URL}/api/telegram/oauth/generate`
+        });
+      }
+    }
+
     next();
   } catch (error: any) {
+    console.error('Telegram auth middleware error:', error);
     res.status(401).json({ error: error.message });
   }
 };

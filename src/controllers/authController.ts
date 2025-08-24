@@ -49,32 +49,10 @@ static async oauthCallback(req: Request, res: Response) {
   try {
     const stateData = JSON.parse(state as string);
 
-    // --- This is the traffic controller logic ---
     if (stateData.type === 'telegram_oauth') {
-      // --- If it's a Telegram user, execute the old, proven logic ---
-      
-      // We will essentially run your old handleTelegramOAuthCallback logic here.
-      // For simplicity, I'm putting the logic directly here. You can also move this
-      // into a separate private method if you prefer.
 
-      // 1. Verify session
-      const { data: session, error: sessionError } = await supabase
-        .from("telegram_sessions")
-        .select("*")
-        .eq("telegram_chat_id", parseInt(stateData.telegram_chat_id))
-        .eq("session_token", stateData.session_token)
-        .gt("expires_at", new Date().toISOString())
-        .single();
-
-      if (sessionError || !session) {
-        throw new Error("Invalid or expired Telegram session.");
-      }
-
-      // 2. Find/Create User and Store Tokens (using your existing logic from TelegramService)
-      // This part handles creating/updating the telegram_user and tenant_tokens
       await TelegramService.handleTelegramOAuthCallback(code as string, state as string);
       
-      // 5. IMPORTANT: Send the final success page to STOP the loop.
       return res.send(`
         <!DOCTYPE html>
         <html>
@@ -132,7 +110,6 @@ static async oauthCallback(req: Request, res: Response) {
       `);
 
     } else {
-      // --- If it's a GPT user, show a simple success page that closes itself ---
       return res.send(`
         <!DOCTYPE html>
         <html>
@@ -150,7 +127,6 @@ static async oauthCallback(req: Request, res: Response) {
       console.error("Response data:", error.response.data);
       console.error("Response status:", error.response.status);
     }
-    // Send the final error page to STOP the loop
     return res.status(500).send(`
       <!DOCTYPE html>
       <html>
@@ -169,14 +145,10 @@ static async oauthCallback(req: Request, res: Response) {
   }
 }
 
-  /**
-   * Exchange authorization code for internal JWT token (for GPT Actions)
-   */
   static async exchangeCodeForToken(req: Request, res: Response) {
     try {
       const { code, client_id, client_secret } = req.body;
 
-      // Validate GPT Action client credentials
       if (client_id !== process.env.GOOGLE_CLIENT_ID || client_secret !== process.env.GOOGLE_CLIENT_SECRET) {
         return res.status(401).json({ error: 'Invalid client credentials' });
       }
