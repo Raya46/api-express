@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { AuthService } from "../services/authService";
+import { google } from "googleapis";
+import { TelegramService } from "../services/telegramService";
+import supabase from "../config/supabase";
 
 export class AuthController {
 
@@ -34,37 +37,107 @@ export class AuthController {
   /**
    * Handle Google OAuth callback for ChatGPT users
    */
-  static async oauthCallback(req: Request, res: Response) {
-    try {
-      const { code, state } = req.query;
+  // In your AuthController.ts file
 
-      if (!code) {
-        return res.status(400).send("Authorization code not provided");
-      }
+static async oauthCallback(req: Request, res: Response) {
+  const { code, state } = req.query;
 
-      const result = await AuthService.handleGoogleOAuthCallback(
-        code as string,
-        state as string
-      );
-
-      // If this is a Telegram request, redirect to Telegram handler
-      if (!result.success && result.token && result.token.includes('/api/auth/callback')) {
-        return res.redirect(result.token);
-      }
-
-      // For successful ChatGPT authentication, return JSON
-      if (result.success) {
-        return res.json(result);
-      }
-
-      // For errors, send error response
-      res.status(500).send(result.message || "Authentication failed");
-
-    } catch (error: any) {
-      console.error("Error in oauthCallback:", error);
-      res.status(500).send(`Authentication failed: ${error.message}`);
-    }
+  if (!code || !state) {
+    return res.status(400).send("Authorization code or state not provided.");
   }
+
+  try {
+    const stateData = JSON.parse(state as string);
+
+    // --- This is the traffic controller logic ---
+    if (stateData.type === 'telegram_oauth') {
+      // --- If it's a Telegram user, execute the old, proven logic ---
+      
+      // We will essentially run your old handleTelegramOAuthCallback logic here.
+      // For simplicity, I'm putting the logic directly here. You can also move this
+      // into a separate private method if you prefer.
+
+      // 1. Verify session
+      const { data: session, error: sessionError } = await supabase
+        .from("telegram_sessions")
+        .select("*")
+        .eq("telegram_chat_id", parseInt(stateData.telegram_chat_id))
+        .eq("session_token", stateData.session_token)
+        .gt("expires_at", new Date().toISOString())
+        .single();
+
+      if (sessionError || !session) {
+        throw new Error("Invalid or expired Telegram session.");
+      }
+
+      // 2. Exchange code for tokens
+      const callbackOAuth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        process.env.GOOGLE_REDIRECT_URI
+      );
+      const { tokens } = await callbackOAuth2Client.getToken(code as string);
+      
+      // 3. Get Google user info
+      callbackOAuth2Client.setCredentials(tokens);
+      const oauth2 = google.oauth2({ version: "v2", auth: callbackOAuth2Client });
+      const { data: googleUser } = await oauth2.userinfo.get();
+      if (!googleUser.email) throw new Error("Could not retrieve Google user info.");
+
+      // 4. Find/Create User and Store Tokens (using your existing logic from TelegramService)
+      // This part handles creating/updating the telegram_user and tenant_tokens
+      await TelegramService.handleTelegramOAuthCallback(code as string, state as string);
+      
+      // 5. IMPORTANT: Send the final success page to STOP the loop.
+      return res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Authorization Successful</title>
+          <style>/* ... your success CSS ... */</style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="success">✅ Authorization Successful!</div>
+            <div class="info">Your Google account is now linked. You can return to Telegram.</div>
+          </div>
+        </body>
+        </html>
+      `);
+
+    } else {
+      // --- If it's a GPT user, show a simple success page that closes itself ---
+      return res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Authentication Successful</title></head>
+        <body>
+          <p>Authentication successful! You can close this window and return to ChatGPT.</p>
+          <script>window.close();</script>
+        </body>
+        </html>
+      `);
+    }
+  } catch (error: any) {
+    console.error("Error in master OAuth callback:", error);
+    // Send the final error page to STOP the loop
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Authorization Failed</title>
+        <style>/* ... your error CSS ... */</style>
+      </head>
+      <body>
+        <div class="container">
+            <div class="error">❌ Authorization Failed</div>
+            <div>Error: ${error.message}</div>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+}
 
   /**
    * Exchange authorization code for internal JWT token (for GPT Actions)
