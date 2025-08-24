@@ -1,0 +1,241 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "GPT Calendar API",
+    "version": "1.0.0",
+    "description": "API for managing Google Calendar for Custom GPT users, including OAuth flow."
+  },
+  "servers": [
+    {
+      "url": "https://api-express-ten.vercel.app",
+      "description": "Production Server"
+    }
+  ],
+  "paths": {
+    "/api/auth/google": {
+      "get": {
+        "summary": "Google OAuth Flow",
+        "operationId": "googleOAuth",
+        "description": "Redirects the user to Google's consent screen to start the authentication process. This is the Authorization URL for the OAuth flow.",
+        "responses": {
+          "302": {
+            "description": "Redirect to Google's authentication page."
+          }
+        }
+      }
+    },
+    "/api/auth/token": {
+      "post": {
+        "summary": "Exchange Authorization Code for Token",
+        "operationId": "exchangeCodeForToken",
+        "description": "Called by OpenAI's servers to exchange an authorization code for an access token. This is the Token URL for the OAuth flow.",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "grant_type": { "type": "string", "example": "authorization_code" },
+                  "code": { "type": "string" },
+                  "client_id": { "type": "string" },
+                  "client_secret": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access token response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": { "type": "string" },
+                    "token_type": { "type": "string", "example": "Bearer" },
+                    "expires_in": { "type": "integer", "example": 3600 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/gpt/calendars": {
+      "get": {
+        "summary": "Get All Calendars (GPT)",
+        "operationId": "getGptCalendars",
+        "security": [{"oAuth2Google": ["read:calendars"]}],
+        "responses": {
+          "200": {"description": "A list of calendars."}
+        }
+      },
+      "post": {
+        "summary": "Create a Calendar (GPT)",
+        "operationId": "createGptCalendar",
+        "security": [{"oAuth2Google": ["write:calendars"]}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "summary": {"type": "string", "example": "New Project Calendar"},
+                  "description": {"type": "string", "example": "Calendar for the new project"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {"description": "Calendar created successfully."}
+        }
+      }
+    },
+    "/api/gpt/calendars/{calendarId}": {
+      "put": {
+        "summary": "Update a Calendar (GPT)",
+        "operationId": "updateGptCalendar",
+        "security": [{"oAuth2Google": ["write:calendars"]}],
+        "parameters": [{"name": "calendarId", "in": "path", "required": true, "schema": {"type": "string"}}],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "summary": {"type": "string"},
+                  "description": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Calendar updated."}
+        }
+      },
+      "delete": {
+        "summary": "Delete a Calendar (GPT)",
+        "operationId": "deleteGptCalendar",
+        "security": [{"oAuth2Google": ["write:calendars"]}],
+        "parameters": [{"name": "calendarId", "in": "path", "required": true, "schema": {"type": "string"}}],
+        "responses": {
+          "204": {"description": "Calendar deleted."}
+        }
+      }
+    },
+    "/api/gpt/calendars/{calendarId}/events": {
+      "get": {
+        "summary": "Get Calendar Events (GPT)",
+        "operationId": "getGptCalendarEvents",
+        "security": [{"oAuth2Google": ["read:calendars"]}],
+        "parameters": [{"name": "calendarId", "in": "path", "required": true, "schema": {"type": "string"}}],
+        "responses": {
+          "200": {"description": "List of events for the specified calendar."}
+        }
+      },
+      "post": {
+        "summary": "Create an Event in a Calendar (GPT)",
+        "operationId": "createGptCalendarEvent",
+        "security": [{"oAuth2Google": ["write:calendars"]}],
+        "parameters": [{"name": "calendarId", "in": "path", "required": true, "schema": {"type": "string"}}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "summary": {"type": "string", "example": "Team Meeting"},
+                  "start": {"type": "object", "properties": {"dateTime": {"type": "string", "format": "date-time"}, "timeZone": {"type": "string"}}},
+                  "end": {"type": "object", "properties": {"dateTime": {"type": "string", "format": "date-time"}, "timeZone": {"type": "string"}}}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {"description": "Event created successfully."}
+        }
+      }
+    },
+    "/api/gpt/events/recurring": {
+      "post": {
+        "summary": "Create a Recurring Event (GPT)",
+        "operationId": "createGptRecurringEvent",
+        "security": [{"oAuth2Google": ["write:calendars"]}],
+        "requestBody": {
+          "description": "Event data including recurrence rules (RRULE).",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "summary": {"type": "string", "example": "Weekly Sync"},
+                  "start": {"type": "object", "properties": {"dateTime": {"type": "string", "format": "date-time"}, "timeZone": {"type": "string"}}},
+                  "end": {"type": "object", "properties": {"dateTime": {"type": "string", "format": "date-time"}, "timeZone": {"type": "string"}}},
+                  "recurrence": {"type": "array", "items": {"type": "string"}, "example": ["RRULE:FREQ=WEEKLY;BYDAY=MO"]}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {"description": "Recurring event created."}
+        }
+      }
+    },
+    "/api/gpt/freebusy": {
+      "get": {
+        "summary": "Get Free/Busy Information (GPT)",
+        "operationId": "getGptFreeBusy",
+        "security": [{"oAuth2Google": ["read:calendars"]}],
+        "responses": {
+          "200": {"description": "Free/busy information retrieved."}
+        }
+      }
+    },
+    "/api/gpt/availability": {
+      "get": {
+        "summary": "Get Available Time Slots (GPT)",
+        "operationId": "getGptAvailability",
+        "security": [{"oAuth2Google": ["read:calendars"]}],
+        "responses": {
+          "200": {"description": "List of available time slots."}
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "string", "example": "NOT_FOUND"},
+          "message": {"type": "string", "example": "The requested resource was not found."}
+        }
+      }
+    },
+    "securitySchemes": {
+      "oAuth2Google": {
+        "type": "oauth2",
+        "description": "OAuth2 flow to authenticate users with their Google account.",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://api-express-ten.vercel.app/api/auth/google",
+            "tokenUrl": "https://api-express-ten.vercel.app/api/auth/token",
+            "scopes": {
+              "read:calendars": "Read access to calendars and events",
+              "write:calendars": "Write access to calendars and events"
+            }
+          }
+        }
+      }
+    }
+  }
+}

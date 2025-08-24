@@ -26,8 +26,8 @@ export class EventController {
       const eventData: EventData = {
         summary,
         description,
-        start,
-        end,
+        start: start.dateTime,
+        end: end.dateTime,
         location,
         attendees,
         reminders,
@@ -84,13 +84,13 @@ export class EventController {
       const eventData: Partial<EventData> = {
         summary,
         description,
-        start,
-        end,
+         ...(start && { start: start.dateTime }),
+      ...(end && { end: end.dateTime }),
         location,
         attendees,
         reminders,
         visibility,
-        timeZone
+      ...(start && { timeZone: start.timeZone || timeZone }),
       };
 
       const result = await EventService.updateEvent(tenantId, eventId, eventData, calendarId);
@@ -352,8 +352,8 @@ export class EventController {
       const eventData: RecurringEventData = {
         summary,
         description,
-        start,
-        end,
+       start: start.dateTime, 
+      end: end.dateTime,
         location,
         attendees,
         frequency,

@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabase';
 import { AuthController } from '../controllers/authController';
 import { TelegramController } from '../controllers/telegramController';
+import { google } from 'googleapis';
 
 // Extend Express Request interface to include user and hasGoogleAuth
 declare global {
@@ -147,6 +148,7 @@ export const requireGoogleAuth = (
   });
 };
 
+
 const checkGoogleTokenValidity = async (
   req: Request,
   res: Response,
@@ -163,120 +165,97 @@ const checkGoogleTokenValidity = async (
     const userId = req.user.id;
     const userType = req.user.user_type;
 
-    let hasValidToken = false;
-    let needsRefresh = false;
+    let tokenInfo: { access_token: string | null, refresh_token: string | null, expiry_date: string | null } | null = null;
     let authUrl = '';
 
     if (userType === 'telegram') {
-      // Check Telegram user's Google token in tenant_tokens table
-      const { data: tenantToken, error } = await supabase
+      authUrl = `${process.env.BASE_URL}/api/telegram/oauth/generate`; // Define auth URL for telegram
+      const { data, error } = await supabase
         .from('tenant_tokens')
         .select('access_token, refresh_token, expiry_date')
         .eq('tenant_id', userId)
         .single();
+      if (error) throw new Error("Could not fetch tenant tokens for Telegram user.");
+      tokenInfo = data;
 
-      if (error || !tenantToken || !tenantToken.access_token) {
-        return res.status(401).json({
-          error: 'Google authentication required for Telegram user',
-          needsAuth: true,
-          authUrl: `${process.env.BASE_URL}/api/telegram/oauth/generate`
-        });
-      }
-
-      // Check if token is expired
-      if (tenantToken.expiry_date) {
-        const expiryDate = new Date(tenantToken.expiry_date);
-        const now = new Date();
-        const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
-
-        if (now.getTime() > expiryDate.getTime() - bufferTime) {
-          console.log('Telegram user Google token expired or about to expire');
-
-          if (!tenantToken.refresh_token) {
-            return res.status(401).json({
-              error: 'Google token expired and no refresh token available',
-              needsAuth: true,
-              authUrl: `${process.env.BASE_URL}/api/telegram/oauth/generate`
-            });
-          }
-
-          needsRefresh = true;
-          authUrl = `${process.env.BASE_URL}/api/telegram/oauth/generate`;
-        }
-      }
-
-      hasValidToken = !!tenantToken.access_token;
-
-    } else {
-      // Check ChatGPT user's Google token in users table
-      const { data: user, error } = await supabase
+    } else { // Assumes 'chatgpt' user
+      authUrl = `${process.env.BASE_URL}/api/auth/google`; // Define auth URL for GPT
+      const { data, error } = await supabase
         .from('users')
         .select('google_access_token, google_refresh_token, token_expires_at')
         .eq('id', userId)
         .single();
+      if (error) throw new Error("Could not fetch user tokens for GPT user.");
+      // Standardize the object keys to match tenant_tokens
+      tokenInfo = {
+          access_token: data?.google_access_token || null,
+          refresh_token: data?.google_refresh_token || null,
+          expiry_date: data?.token_expires_at || null,
+      };
+    }
 
-      if (error) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      if (!user.google_access_token) {
-        return res.status(401).json({
-          error: 'Google authentication required for ChatGPT user',
+    if (!tokenInfo || !tokenInfo.access_token) {
+       return res.status(401).json({
+          error: 'Google authentication required',
           needsAuth: true,
-          authUrl: `${process.env.BASE_URL}/api/auth/google`
+          authUrl: authUrl
+       });
+    }
+
+    const isTokenExpired = tokenInfo.expiry_date ? new Date() > new Date(new Date(tokenInfo.expiry_date).getTime() - (5 * 60 * 1000)) : true;
+
+    if (isTokenExpired) {
+      console.log(`Google token for ${userType} user ${userId} requires refresh.`);
+
+      if (!tokenInfo.refresh_token) {
+        return res.status(401).json({
+          error: 'Google token expired and no refresh token is available.',
+          needsAuth: true,
+          authUrl: authUrl
         });
       }
 
-      // Check if token is expired
-      if (user.token_expires_at) {
-        const expiryDate = new Date(user.token_expires_at);
-        const now = new Date();
-        const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
-
-        if (now.getTime() > expiryDate.getTime() - bufferTime) {
-          console.log('ChatGPT user Google token expired or about to expire');
-
-          if (!user.google_refresh_token) {
-            return res.status(401).json({
-              error: 'Google token expired and no refresh token available',
-              needsAuth: true,
-              authUrl: `${process.env.BASE_URL}/api/auth/google`
-            });
-          }
-
-          needsRefresh = true;
-          authUrl = `${process.env.BASE_URL}/api/auth/google`;
-        }
-      }
-
-      hasValidToken = !!user.google_access_token;
-    }
-
-    if (!hasValidToken) {
-      return res.status(401).json({
-        error: 'Google authentication required',
-        needsAuth: true,
-        authUrl: authUrl || `${process.env.BASE_URL}/api/auth/google`
-      });
-    }
-
-    // Try to refresh token if needed
-    if (needsRefresh) {
+      // --- Universal Token Refresh Logic ---
       try {
-        if (userType === 'telegram') {
-          // For Telegram users, we need to implement token refresh logic
-          // This would typically involve calling Google's refresh token endpoint
-          console.log('Telegram user token refresh needed - would implement refresh logic here');
-        } else {
-          // For ChatGPT users, use existing refresh logic
-          await AuthController.getUserWithGoogleToken(userId);
-        }
-        console.log('Google token refreshed successfully');
-      } catch (refreshError: any) {
-        console.error('Failed to refresh Google token:', refreshError);
+        const oauth2Client = new google.auth.OAuth2(
+          process.env.GOOGLE_CLIENT_ID,
+          process.env.GOOGLE_CLIENT_SECRET
+        );
+        oauth2Client.setCredentials({ refresh_token: tokenInfo.refresh_token });
+        
+        const { credentials } = await oauth2Client.refreshAccessToken();
+        const newTokens = credentials;
 
+        console.log('Google token refreshed successfully.');
+
+        // --- Universal Token Update Logic ---
+        const updatePayload = {
+            access_token: newTokens.access_token,
+            expiry_date: newTokens.expiry_date ? new Date(newTokens.expiry_date).toISOString() : null,
+            // Only update refresh token if a new one is provided
+            ...(newTokens.refresh_token && { refresh_token: newTokens.refresh_token }),
+            updated_at: new Date().toISOString(),
+        };
+
+        if (userType === 'telegram') {
+            const { error } = await supabase.from('tenant_tokens').update(updatePayload).eq('tenant_id', userId);
+            if (error) throw new Error("Failed to update refreshed tokens for Telegram user.");
+        } else {
+            // Adapt keys for the 'users' table
+            const userUpdatePayload = {
+                google_access_token: updatePayload.access_token,
+                token_expires_at: updatePayload.expiry_date,
+                ...(updatePayload.refresh_token && { google_refresh_token: updatePayload.refresh_token }),
+                updated_at: updatePayload.updated_at,
+            };
+            const { error } = await supabase.from('users').update(userUpdatePayload).eq('id', userId);
+            if (error) throw new Error("Failed to update refreshed tokens for GPT user.");
+        }
+
+      } catch (refreshError: any) {
+        console.error('Failed to refresh Google token:', refreshError.message);
         return res.status(401).json({
-          error: 'Failed to refresh Google token',
+          error: 'Failed to refresh Google token. Please re-authenticate.',
           needsAuth: true,
           authUrl: authUrl
         });
