@@ -2,6 +2,68 @@ import { Request, Response } from "express";
 import { EventService, EventData, RecurringEventData } from "../services/eventService";
 
 export class EventController {
+  private static parseEventData(body: any): EventData {
+    const {
+      summary,
+      description,
+      start,
+      end,
+      location,
+      attendees,
+      reminders,
+      visibility = "default",
+      timeZone = "Asia/Jakarta"
+    } = body;
+
+    let startDateTime: string;
+    let endDateTime: string;
+
+    if (typeof start === 'string') {
+      startDateTime = start;
+    }
+    else if (start && typeof start === 'object' && start.dateTime) {
+      startDateTime = start.dateTime;
+    }
+    else if (typeof start === 'string' && start.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(start);
+        startDateTime = parsed.dateTime || parsed.start?.dateTime;
+      } catch (e) {
+        throw new Error("Invalid start time format");
+      }
+    } else {
+      throw new Error("Start time is required");
+    }
+
+    // Same logic for end time
+    if (typeof end === 'string') {
+      endDateTime = end;
+    } else if (end && typeof end === 'object' && end.dateTime) {
+      endDateTime = end.dateTime;
+    } else if (typeof end === 'string' && end.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(end);
+        endDateTime = parsed.dateTime || parsed.end?.dateTime;
+      } catch (e) {
+        throw new Error("Invalid end time format");
+      }
+    } else {
+      throw new Error("End time is required");
+    }
+
+    return {
+      summary,
+      description,
+      start: startDateTime,
+      end: endDateTime,
+      location,
+      attendees,
+      reminders,
+      visibility,
+      timeZone
+    };
+  }
+
   static async createCalendarEvent(req: Request, res: Response) {
     try {
       const tenantId = req.user?.id;
@@ -16,8 +78,7 @@ export class EventController {
       console.log("Creating event for calendar:", calendarId);
       console.log("Request body:", JSON.stringify(req.body, null, 2));
 
-      // Enhanced request body parsing with multiple format support
-      const eventData = this.parseEventData(req.body);
+      const eventData = EventController.parseEventData(req.body);
 
       console.log("Parsed event data:", JSON.stringify(eventData, null, 2));
 
@@ -72,31 +133,9 @@ export class EventController {
       const { eventId } = req.params;
       const calendarId = req.params.calendarId || "primary";
 
-      const {
-        summary,
-        description,
-        start,
-        end,
-        location,
-        attendees,
-        reminders,
-        visibility,
-        timeZone = "Asia/Jakarta"
-      } = req.body;
+      const updateData = EventController.parseEventDataForUpdate(req.body);
 
-      const eventData: Partial<EventData> = {
-        summary,
-        description,
-         ...(start && { start: start.dateTime }),
-      ...(end && { end: end.dateTime }),
-        location,
-        attendees,
-        reminders,
-        visibility,
-      ...(start && { timeZone: start.timeZone || timeZone }),
-      };
-
-      const result = await EventService.updateEvent(tenantId, eventId, eventData, calendarId);
+      const result = await EventService.updateEvent(tenantId, eventId, updateData, calendarId);
 
       res.json({
         success: true,
@@ -118,6 +157,64 @@ export class EventController {
         });
       }
     }
+  }
+
+  private static parseEventDataForUpdate(body: any): Partial<EventData> {
+    const {
+      summary,
+      description,
+      start,
+      end,
+      location,
+      attendees,
+      reminders,
+      visibility,
+      timeZone = "Asia/Jakarta"
+    } = body;
+
+    const updateData: Partial<EventData> = {
+      summary,
+      description,
+      location,
+      attendees,
+      reminders,
+      visibility,
+      timeZone
+    };
+
+    // Handle start time if provided
+    if (start) {
+      if (typeof start === 'string') {
+        updateData.start = start;
+      } else if (start && typeof start === 'object' && start.dateTime) {
+        updateData.start = start.dateTime;
+      } else if (typeof start === 'string' && start.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(start);
+          updateData.start = parsed.dateTime || parsed.start?.dateTime;
+        } catch (e) {
+          throw new Error("Invalid start time format");
+        }
+      }
+    }
+
+    // Handle end time if provided
+    if (end) {
+      if (typeof end === 'string') {
+        updateData.end = end;
+      } else if (end && typeof end === 'object' && end.dateTime) {
+        updateData.end = end.dateTime;
+      } else if (typeof end === 'string' && end.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(end);
+          updateData.end = parsed.dateTime || parsed.end?.dateTime;
+        } catch (e) {
+          throw new Error("Invalid end time format");
+        }
+      }
+    }
+
+    return updateData;
   }
 
   static async deleteCalendarEvent(req: Request, res: Response) {
@@ -352,11 +449,46 @@ export class EventController {
         timeZone = "Asia/Jakarta"
       } = req.body;
 
+      let startDateTime: string;
+      let endDateTime: string;
+
+      // Parse start time
+      if (typeof start === 'string') {
+        startDateTime = start;
+      } else if (start && typeof start === 'object' && start.dateTime) {
+        startDateTime = start.dateTime;
+      } else if (typeof start === 'string' && start.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(start);
+          startDateTime = parsed.dateTime || parsed.start?.dateTime;
+        } catch (e) {
+          throw new Error("Invalid start time format");
+        }
+      } else {
+        throw new Error("Start time is required");
+      }
+
+      // Parse end time
+      if (typeof end === 'string') {
+        endDateTime = end;
+      } else if (end && typeof end === 'object' && end.dateTime) {
+        endDateTime = end.dateTime;
+      } else if (typeof end === 'string' && end.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(end);
+          endDateTime = parsed.dateTime || parsed.end?.dateTime;
+        } catch (e) {
+          throw new Error("Invalid end time format");
+        }
+      } else {
+        throw new Error("End time is required");
+      }
+
       const eventData: RecurringEventData = {
         summary,
         description,
-       start: start.dateTime, 
-      end: end.dateTime,
+        start: startDateTime,
+        end: endDateTime,
         location,
         attendees,
         frequency,
@@ -389,72 +521,5 @@ export class EventController {
         });
       }
     }
-  }
-
-  // Enhanced request parsing to handle multiple input formats
-  private static parseEventData(body: any): EventData {
-    const {
-      summary,
-      description,
-      start,
-      end,
-      location,
-      attendees,
-      reminders,
-      visibility = "default",
-      timeZone = "Asia/Jakarta"
-    } = body;
-
-    // Handle different start/end formats
-    let startDateTime: string;
-    let endDateTime: string;
-
-    // Format 1: Direct string
-    if (typeof start === 'string') {
-      startDateTime = start;
-    }
-    // Format 2: Object with dateTime
-    else if (start && typeof start === 'object' && start.dateTime) {
-      startDateTime = start.dateTime;
-    }
-    // Format 3: Object parsed from JSON string (N8N case)
-    else if (typeof start === 'string' && start.startsWith('{')) {
-      try {
-        const parsed = JSON.parse(start);
-        startDateTime = parsed.dateTime || parsed.start?.dateTime;
-      } catch (e) {
-        throw new Error("Invalid start time format");
-      }
-    } else {
-      throw new Error("Start time is required");
-    }
-
-    // Same logic for end time
-    if (typeof end === 'string') {
-      endDateTime = end;
-    } else if (end && typeof end === 'object' && end.dateTime) {
-      endDateTime = end.dateTime;
-    } else if (typeof end === 'string' && end.startsWith('{')) {
-      try {
-        const parsed = JSON.parse(end);
-        endDateTime = parsed.dateTime || parsed.end?.dateTime;
-      } catch (e) {
-        throw new Error("Invalid end time format");
-      }
-    } else {
-      throw new Error("End time is required");
-    }
-
-    return {
-      summary,
-      description,
-      start: startDateTime,
-      end: endDateTime,
-      location,
-      attendees,
-      reminders,
-      visibility,
-      timeZone
-    };
   }
 }

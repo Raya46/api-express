@@ -91,29 +91,42 @@ export class EventService {
     }
   }
 
-  // Helper function to normalize attendees
   private static normalizeAttendees(attendees: any): string[] | undefined {
     if (!attendees) return undefined;
 
-    // If it's an empty string, return undefined
-    if (attendees === "" || attendees === null) return undefined;
+    // If it's an empty string or null, return undefined
+    if (attendees === "" || attendees === null || attendees === undefined) return undefined;
 
-    // If it's already an array, return it
+    // If it's already an array, filter and validate emails
     if (Array.isArray(attendees)) {
-      return attendees.filter(email => email && email.trim() !== "");
+      const validEmails = attendees
+        .filter(email => email && typeof email === 'string' && email.trim() !== "")
+        .map(email => email.trim())
+        .filter(email => this.isValidEmail(email));
+      return validEmails.length > 0 ? validEmails : undefined;
     }
 
     // If it's a string, try to parse it
     if (typeof attendees === "string") {
+      const trimmed = attendees.trim();
+      if (trimmed === "") return undefined;
+
       // Try to parse as JSON first
       try {
-        const parsed = JSON.parse(attendees);
+        const parsed = JSON.parse(trimmed);
         if (Array.isArray(parsed)) {
-          return parsed.filter(email => email && email.trim() !== "");
+          const validEmails = parsed
+            .filter(email => email && typeof email === 'string' && email.trim() !== "")
+            .map(email => email.trim())
+            .filter(email => this.isValidEmail(email));
+          return validEmails.length > 0 ? validEmails : undefined;
         }
       } catch (e) {
         // Not JSON, treat as comma-separated string
-        const emails = attendees.split(",").map(email => email.trim()).filter(email => email !== "");
+        const emails = trimmed
+          .split(",")
+          .map(email => email.trim())
+          .filter(email => email !== "" && this.isValidEmail(email));
         return emails.length > 0 ? emails : undefined;
       }
     }
@@ -121,79 +134,142 @@ export class EventService {
     return undefined;
   }
 
-  // Helper function to normalize reminders
+  private static isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
   private static normalizeReminders(reminders: any) {
+    // Handle null, undefined, or empty string
     if (!reminders || reminders === "" || reminders === null) {
       return { useDefault: true };
     }
 
-    if (Array.isArray(reminders)) {
-      return {
-        useDefault: false,
-        overrides: reminders
-      };
+    if (typeof reminders === 'object' && !Array.isArray(reminders)) {
+      if (reminders.useDefault !== undefined || reminders.overrides !== undefined) {
+        return reminders;
+      }
     }
 
+    // If it's an array of reminder objects
+    if (Array.isArray(reminders)) {
+      const validReminders = reminders.filter(reminder => 
+        reminder && 
+        typeof reminder === 'object' && 
+        reminder.method && 
+        typeof reminder.minutes === 'number'
+      );
+      
+      return validReminders.length > 0 ? {
+        useDefault: false,
+        overrides: validReminders
+      } : { useDefault: true };
+    }
+
+    // If it's a JSON string
     if (typeof reminders === "string") {
+      const trimmed = reminders.trim();
+      if (trimmed === "") return { useDefault: true };
+
       try {
-        const parsed = JSON.parse(reminders);
+        const parsed = JSON.parse(trimmed);
+        
+        // If parsed result is an array
         if (Array.isArray(parsed)) {
-          return {
+          const validReminders = parsed.filter(reminder => 
+            reminder && 
+            typeof reminder === 'object' && 
+            reminder.method && 
+            typeof reminder.minutes === 'number'
+          );
+          
+          return validReminders.length > 0 ? {
             useDefault: false,
-            overrides: parsed
-          };
+            overrides: validReminders
+          } : { useDefault: true };
+        }
+        
+        // If parsed result is an object
+        if (typeof parsed === 'object' && parsed !== null) {
+          if (parsed.useDefault !== undefined || parsed.overrides !== undefined) {
+            return parsed;
+          }
         }
       } catch (e) {
-        // Invalid JSON, use default
+        console.warn("Invalid reminders JSON format:", e);
       }
     }
 
     return { useDefault: true };
   }
 
-  // Enhanced validation method
   private static validateEventData(eventData: EventData): string[] {
     const errors: string[] = [];
 
+    // Validate summary
     if (!eventData.summary?.trim()) {
       errors.push("summary is required and cannot be empty");
+    } else if (eventData.summary.trim().length > 1024) {
+      errors.push("summary cannot exceed 1024 characters");
     }
 
+    // Validate start time
     if (!eventData.start) {
       errors.push("start time is required");
     }
 
+    // Validate end time
     if (!eventData.end) {
       errors.push("end time is required");
+    }
+
+    // Validate description length if provided
+    if (eventData.description && eventData.description.length > 8192) {
+      errors.push("description cannot exceed 8192 characters");
+    }
+
+    // Validate location length if provided
+    if (eventData.location && eventData.location.length > 1024) {
+      errors.push("location cannot exceed 1024 characters");
     }
 
     return errors;
   }
 
-  // Extract datetime string from various input formats
   private static extractDateTime(timeInput: string | { dateTime: string; timeZone?: string }): string {
     if (typeof timeInput === 'string') {
-      return timeInput;
+      return timeInput.trim();
     } else if (timeInput && typeof timeInput === 'object' && timeInput.dateTime) {
-      return timeInput.dateTime;
+      return timeInput.dateTime.trim();
     }
-    throw new Error("Invalid time format");
+    throw new Error("Invalid time format - expected string or object with dateTime property");
   }
 
-  // Validate ISO datetime format
   private static isValidISODateTime(dateTime: string): boolean {
     try {
+      // Check if string contains 'T' separator
+      if (!dateTime.includes('T')) {
+        return false;
+      }
+
       const date = new Date(dateTime);
-      return date instanceof Date && !isNaN(date.getTime()) && dateTime.includes('T');
+      
+      // Check if date is valid
+      if (!(date instanceof Date) || isNaN(date.getTime())) {
+        return false;
+      }
+
+      // Check if it's in ISO format (basic validation)
+      const isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}([+-]\d{2}:\d{2}|Z)?$/;
+      return isoRegex.test(dateTime);
     } catch {
       return false;
     }
   }
 
-  // Enhanced database save with retry logic
   private static async saveEventToDatabase(eventData: any, calendarId: string, tenantId: string, attendees: string[] | undefined) {
     try {
-      const { error } = await supabase.from("events").insert({
+      const insertData = {
         id: eventData.id,
         summary: eventData.summary,
         description: eventData.description || null,
@@ -207,11 +283,31 @@ export class EventService {
         html_link: eventData.htmlLink,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      });
+      };
+
+      const { error } = await supabase.from("events").insert(insertData);
 
       if (error) {
         console.error("Database save error:", error);
-        // Could implement retry logic here if needed
+        
+        // If it's a duplicate key error, try to update instead
+        if (error.code === '23505') { // PostgreSQL unique violation
+          console.log("Event already exists, attempting to update...");
+          const { error: updateError } = await supabase
+            .from("events")
+            .update({
+              ...insertData,
+              created_at: undefined, // Don't update created_at
+            })
+            .eq("id", eventData.id)
+            .eq("user_id", tenantId);
+          
+          if (updateError) {
+            console.error("Database update after duplicate error:", updateError);
+          }
+        }
+      } else {
+        console.log("Event saved to database successfully");
       }
     } catch (dbError) {
       console.error("Database save error:", dbError);
@@ -219,8 +315,11 @@ export class EventService {
     }
   }
 
+  // ✅ MAIN CREATE EVENT METHOD - Enhanced with better error messages
   static async createEvent(tenantId: string, eventData: EventData, calendarId: string = "primary") {
     try {
+      console.log("Creating event - Input data:", JSON.stringify(eventData, null, 2));
+      
       const client = await this.getAuthorizedClient(tenantId);
       const calendar = google.calendar({ version: "v3", auth: client });
 
@@ -235,19 +334,30 @@ export class EventService {
       const endDateTime = this.extractDateTime(eventData.end);
       const defaultTimeZone = eventData.timeZone || "Asia/Jakarta";
 
+      console.log("Extracted datetimes:", { startDateTime, endDateTime, defaultTimeZone });
+
       // Validate datetime format
-      if (!this.isValidISODateTime(startDateTime) || !this.isValidISODateTime(endDateTime)) {
-        throw new Error("Invalid datetime format. Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss+07:00)");
+      if (!this.isValidISODateTime(startDateTime)) {
+        throw new Error(`Invalid start datetime format: "${startDateTime}". Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss+07:00)`);
+      }
+      
+      if (!this.isValidISODateTime(endDateTime)) {
+        throw new Error(`Invalid end datetime format: "${endDateTime}". Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss+07:00)`);
       }
 
       // Validate start < end
-      if (new Date(startDateTime) >= new Date(endDateTime)) {
-        throw new Error("End time must be after start time");
+      const startDate = new Date(startDateTime);
+      const endDate = new Date(endDateTime);
+      
+      if (startDate >= endDate) {
+        throw new Error(`End time (${endDateTime}) must be after start time (${startDateTime})`);
       }
 
       // Normalize attendees and reminders
       const attendees = this.normalizeAttendees(eventData.attendees);
       const reminders = this.normalizeReminders(eventData.reminders);
+
+      console.log("Normalized data:", { attendees, reminders });
 
       // Build event object with proper structure
       const event: any = {
@@ -277,13 +387,15 @@ export class EventService {
         event.attendees = attendees.map((email: string) => ({ email: email.trim() }));
       }
 
-      console.log("Creating event with payload:", JSON.stringify(event, null, 2));
+      console.log("Final event payload:", JSON.stringify(event, null, 2));
 
       const result = await calendar.events.insert({
         calendarId,
         requestBody: event,
         sendUpdates: attendees && attendees.length > 0 ? "all" : "none",
       });
+
+      console.log("Event created successfully:", result.data.id);
 
       // Enhanced database save with better error handling
       await this.saveEventToDatabase(result.data, calendarId, tenantId, attendees);
@@ -298,7 +410,8 @@ export class EventService {
         status: result.data.status,
         htmlLink: result.data.htmlLink,
         created: result.data.created,
-        updated: result.data.updated
+        updated: result.data.updated,
+        attendees: result.data.attendees
       };
     } catch (error: any) {
       console.error("Error creating event:", error);
@@ -310,6 +423,8 @@ export class EventService {
         throw new Error("Google authentication required or insufficient permissions");
       } else if (error.message.includes("Validation failed")) {
         throw error; // Re-throw validation errors as-is
+      } else if (error.message.includes("Invalid") && error.message.includes("datetime")) {
+        throw error; // Re-throw datetime validation errors as-is
       } else {
         throw new Error(`Failed to create event: ${error.message}`);
       }
@@ -323,16 +438,48 @@ export class EventService {
 
       const eventUpdate: any = {};
 
-      if (eventData.summary) eventUpdate.summary = eventData.summary;
+      if (eventData.summary?.trim()) {
+        eventUpdate.summary = eventData.summary.trim();
+      }
+      
       if (eventData.description !== undefined) {
-        eventUpdate.description = eventData.description?.trim() !== "" ? eventData.description : "";
+        eventUpdate.description = eventData.description?.trim() || "";
       }
-      if (eventData.location !== undefined) eventUpdate.location = eventData.location;
+      
+      if (eventData.location !== undefined) {
+        eventUpdate.location = eventData.location?.trim() || "";
+      }
+      
       if (eventData.start) {
-        eventUpdate.start = { dateTime: eventData.start, timeZone: eventData.timeZone || "Asia/Jakarta" };
+        const startDateTime = this.extractDateTime(eventData.start);
+        if (!this.isValidISODateTime(startDateTime)) {
+          throw new Error(`Invalid start datetime format: "${startDateTime}"`);
+        }
+        eventUpdate.start = { 
+          dateTime: startDateTime, 
+          timeZone: eventData.timeZone || "Asia/Jakarta" 
+        };
       }
+      
       if (eventData.end) {
-        eventUpdate.end = { dateTime: eventData.end, timeZone: eventData.timeZone || "Asia/Jakarta" };
+        const endDateTime = this.extractDateTime(eventData.end);
+        if (!this.isValidISODateTime(endDateTime)) {
+          throw new Error(`Invalid end datetime format: "${endDateTime}"`);
+        }
+        eventUpdate.end = { 
+          dateTime: endDateTime, 
+          timeZone: eventData.timeZone || "Asia/Jakarta" 
+        };
+      }
+
+      // Validate start < end if both are provided
+      if (eventUpdate.start && eventUpdate.end) {
+        const startDate = new Date(eventUpdate.start.dateTime);
+        const endDate = new Date(eventUpdate.end.dateTime);
+        
+        if (startDate >= endDate) {
+          throw new Error("End time must be after start time");
+        }
       }
 
       // Handle attendees properly
@@ -350,7 +497,11 @@ export class EventService {
         eventUpdate.reminders = this.normalizeReminders(eventData.reminders);
       }
 
-      if (eventData.visibility) eventUpdate.visibility = eventData.visibility;
+      if (eventData.visibility) {
+        eventUpdate.visibility = eventData.visibility;
+      }
+
+      console.log("Updating event with payload:", JSON.stringify(eventUpdate, null, 2));
 
       const result = await calendar.events.update({
         calendarId,
@@ -365,11 +516,15 @@ export class EventService {
           updated_at: new Date().toISOString(),
         };
 
-        if (eventData.summary) updateData.summary = eventData.summary;
-        if (eventData.description !== undefined) updateData.description = eventData.description;
-        if (eventData.location !== undefined) updateData.location = eventData.location;
-        if (eventData.start) updateData.start_time = eventData.start;
-        if (eventData.end) updateData.end_time = eventData.end;
+        if (eventData.summary?.trim()) updateData.summary = eventData.summary.trim();
+        if (eventData.description !== undefined) updateData.description = eventData.description?.trim() || null;
+        if (eventData.location !== undefined) updateData.location = eventData.location?.trim() || null;
+        if (eventData.start) {
+          updateData.start_time = this.extractDateTime(eventData.start);
+        }
+        if (eventData.end) {
+          updateData.end_time = this.extractDateTime(eventData.end);
+        }
         if (eventData.attendees !== undefined) {
           const attendees = this.normalizeAttendees(eventData.attendees);
           updateData.attendees = attendees && attendees.length > 0 ? JSON.stringify(attendees) : null;
@@ -386,10 +541,16 @@ export class EventService {
       return result.data;
     } catch (error: any) {
       console.error("Error updating event:", error);
-      throw error;
+      
+      if (error.message.includes("Invalid") && error.message.includes("datetime")) {
+        throw error; // Re-throw datetime validation errors as-is
+      }
+      
+      throw new Error(`Failed to update event: ${error.message}`);
     }
   }
 
+  // ✅ REST OF THE METHODS REMAIN THE SAME (keeping them for completeness)
   static async deleteEvent(tenantId: string, eventId: string, calendarId: string = "primary") {
     try {
       const client = await this.getAuthorizedClient(tenantId);
@@ -418,6 +579,99 @@ export class EventService {
     }
   }
 
+  static async createRecurringEvent(tenantId: string, eventData: RecurringEventData, calendarId: string = "primary") {
+    try {
+      const client = await this.getAuthorizedClient(tenantId);
+      const calendar = google.calendar({ version: "v3", auth: client });
+
+      // Enhanced validation
+      const validationErrors = this.validateEventData(eventData);
+      if (validationErrors.length > 0) {
+        throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
+      }
+
+      // Extract and validate datetime
+      const startDateTime = this.extractDateTime(eventData.start);
+      const endDateTime = this.extractDateTime(eventData.end);
+
+      if (!this.isValidISODateTime(startDateTime) || !this.isValidISODateTime(endDateTime)) {
+        throw new Error("Invalid datetime format. Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss+07:00)");
+      }
+
+      // Validate start < end
+      if (new Date(startDateTime) >= new Date(endDateTime)) {
+        throw new Error("End time must be after start time");
+      }
+
+      // Handle attendees properly
+      const attendees = this.normalizeAttendees(eventData.attendees);
+
+      let recurrenceRule = `FREQ=${eventData.frequency || 'WEEKLY'};INTERVAL=${eventData.interval || 1}`;
+
+      if (eventData.count) recurrenceRule += `;COUNT=${eventData.count}`;
+      if (eventData.until) recurrenceRule += `;UNTIL=${new Date(eventData.until).toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
+      if (eventData.byDay && eventData.frequency === 'WEEKLY') recurrenceRule += `;BYDAY=${eventData.byDay.join(',')}`;
+
+      const eventResource: any = {
+        summary: eventData.summary.trim(),
+        start: {
+          dateTime: startDateTime,
+          timeZone: eventData.timeZone || "Asia/Jakarta",
+        },
+        end: {
+          dateTime: endDateTime,
+          timeZone: eventData.timeZone || "Asia/Jakarta",
+        },
+        recurrence: [`RRULE:${recurrenceRule}`],
+      };
+
+      // Add optional fields
+      if (eventData.description?.trim()) {
+        eventResource.description = eventData.description.trim();
+      }
+
+      if (eventData.location?.trim()) {
+        eventResource.location = eventData.location.trim();
+      }
+
+      if (attendees && attendees.length > 0) {
+        eventResource.attendees = attendees.map((email: string) => ({ email }));
+      }
+
+      const result = await calendar.events.insert({
+        calendarId,
+        requestBody: eventResource,
+        sendUpdates: attendees && attendees.length > 0 ? "all" : "none",
+      });
+
+      // Save to database with recurrence info
+      try {
+        await supabase.from("events").insert({
+          id: result.data.id,
+          summary: result.data.summary,
+          description: result.data.description,
+          start_time: result.data.start?.dateTime,
+          end_time: result.data.end?.dateTime,
+          location: result.data.location,
+          calendar_id: calendarId,
+          user_id: tenantId,
+          status: result.data.status,
+          attendees: attendees && attendees.length > 0 ? JSON.stringify(attendees) : null,
+          recurrence: recurrenceRule,
+          created_at: new Date().toISOString(),
+        });
+      } catch (dbError) {
+        console.error("Database save error:", dbError);
+      }
+
+      return result.data;
+    } catch (error: any) {
+      console.error("Error creating recurring event:", error);
+      throw error;
+    }
+  }
+
+  // ✅ OTHER METHODS REMAIN UNCHANGED FOR BREVITY
   static async getEvent(tenantId: string, eventId: string, calendarId: string = "primary") {
     try {
       const client = await this.getAuthorizedClient(tenantId);
@@ -609,81 +863,6 @@ export class EventService {
       };
     } catch (error: any) {
       console.error("Error getting available time slots:", error);
-      throw error;
-    }
-  }
-
-  static async createRecurringEvent(tenantId: string, eventData: RecurringEventData, calendarId: string = "primary") {
-    try {
-      const client = await this.getAuthorizedClient(tenantId);
-      const calendar = google.calendar({ version: "v3", auth: client });
-
-      if (!eventData.summary || !eventData.start || !eventData.end) {
-        throw new Error("Missing required fields: summary, start, end");
-      }
-
-      // Handle attendees properly
-      const attendees = this.normalizeAttendees(eventData.attendees);
-
-      let recurrenceRule = `FREQ=${eventData.frequency || 'WEEKLY'};INTERVAL=${eventData.interval || 1}`;
-
-      if (eventData.count) recurrenceRule += `;COUNT=${eventData.count}`;
-      if (eventData.until) recurrenceRule += `;UNTIL=${new Date(eventData.until).toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
-      if (eventData.byDay && eventData.frequency === 'WEEKLY') recurrenceRule += `;BYDAY=${eventData.byDay.join(',')}`;
-
-      const eventResource: any = {
-        summary: eventData.summary,
-        location: eventData.location,
-        start: {
-          dateTime: eventData.start,
-          timeZone: eventData.timeZone || "Asia/Jakarta",
-        },
-        end: {
-          dateTime: eventData.end,
-          timeZone: eventData.timeZone || "Asia/Jakarta",
-        },
-        recurrence: [`RRULE:${recurrenceRule}`],
-      };
-
-      // Only add description if it's not empty
-      if (eventData.description && eventData.description.trim() !== "") {
-        eventResource.description = eventData.description;
-      }
-
-      // Only add attendees if there are any
-      if (attendees && attendees.length > 0) {
-        eventResource.attendees = attendees.map((email: string) => ({ email }));
-      }
-
-      const result = await calendar.events.insert({
-        calendarId,
-        requestBody: eventResource,
-        sendUpdates: attendees && attendees.length > 0 ? "all" : "none",
-      });
-
-      // Save to database with recurrence info
-      try {
-        await supabase.from("events").insert({
-          id: result.data.id,
-          summary: result.data.summary,
-          description: result.data.description,
-          start_time: result.data.start?.dateTime,
-          end_time: result.data.end?.dateTime,
-          location: result.data.location,
-          calendar_id: calendarId,
-          user_id: tenantId,
-          status: result.data.status,
-          attendees: attendees && attendees.length > 0 ? JSON.stringify(attendees) : null,
-          recurrence: recurrenceRule,
-          created_at: new Date().toISOString(),
-        });
-      } catch (dbError) {
-        console.error("Database save error:", dbError);
-      }
-
-      return result.data;
-    } catch (error: any) {
-      console.error("Error creating recurring event:", error);
       throw error;
     }
   }
