@@ -70,21 +70,7 @@ static async oauthCallback(req: Request, res: Response) {
         throw new Error("Invalid or expired Telegram session.");
       }
 
-      // 2. Exchange code for tokens
-      const callbackOAuth2Client = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET,
-        process.env.GOOGLE_REDIRECT_URI
-      );
-      const { tokens } = await callbackOAuth2Client.getToken(code as string);
-      
-      // 3. Get Google user info
-      callbackOAuth2Client.setCredentials(tokens);
-      const oauth2 = google.oauth2({ version: "v2", auth: callbackOAuth2Client });
-      const { data: googleUser } = await oauth2.userinfo.get();
-      if (!googleUser.email) throw new Error("Could not retrieve Google user info.");
-
-      // 4. Find/Create User and Store Tokens (using your existing logic from TelegramService)
+      // 2. Find/Create User and Store Tokens (using your existing logic from TelegramService)
       // This part handles creating/updating the telegram_user and tenant_tokens
       await TelegramService.handleTelegramOAuthCallback(code as string, state as string);
       
@@ -119,7 +105,11 @@ static async oauthCallback(req: Request, res: Response) {
       `);
     }
   } catch (error: any) {
-    console.error("Error in master OAuth callback:", error);
+    console.error("Error in master OAuth callback:", error.message);
+    if (error.response) {
+      console.error("Response data:", error.response.data);
+      console.error("Response status:", error.response.status);
+    }
     // Send the final error page to STOP the loop
     return res.status(500).send(`
       <!DOCTYPE html>
