@@ -5,7 +5,11 @@ import { UserNotLinkedError, GoogleAuthRequiredError, CalendarNotFoundError } fr
 export class CalendarController {
   static async createCalendar(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const calendarData: CalendarData = {
         summary: req.body.summary || "New Calendar from App",
         timeZone: req.body.timeZone || "Asia/Jakarta",
@@ -35,7 +39,11 @@ export class CalendarController {
 
   static async getCalendars(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const result = await CalendarService.getCalendars(tenantId);
 
       res.json(result);
@@ -58,7 +66,11 @@ export class CalendarController {
 
   static async updateCalendar(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const { calendarId } = req.params;
 
       const calendarData: Partial<CalendarData> = {
@@ -92,7 +104,11 @@ export class CalendarController {
 
   static async deleteCalendar(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const { calendarId } = req.params;
 
       // Don't allow deleting primary calendar

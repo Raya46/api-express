@@ -78,7 +78,7 @@ export class TelegramAuthController {
     try {
       // Parse state
       const stateData = JSON.parse(state as string);
-      
+
       if (stateData.type !== 'telegram_oauth') {
         return res.status(400).send("Invalid state type");
       }
@@ -118,50 +118,27 @@ export class TelegramAuthController {
         throw new Error("No email provided by Google");
       }
 
-      // Check if user exists
-      let { data: existingUser } = await supabase
-        .from("users")
+      console.log("Telegram OAuth - Google user data:", googleUser);
+
+      // Check if Telegram user already exists
+      let { data: existingTelegramUser } = await supabase
+        .from("telegram_users")
         .select("*")
-        .eq("email", googleUser.email)
+        .eq("telegram_chat_id", parseInt(stateData.telegram_chat_id))
         .single();
 
-      let userId: string;
+      let telegramUserId: string;
 
-      if (!existingUser) {
-        // Create new user with Telegram info
-        const { data: authData, error: signUpError } = await supabase.auth.signUp({
-          email: googleUser.email!,
-          password: Math.random().toString(36),
-          options: {
-            data: {
-              full_name: googleUser.name || "",
-              avatar_url: googleUser.picture || "",
-              google_id: googleUser.id,
-              provider: "google",
-            },
-          },
-        });
-
-        if (signUpError || !authData.user) {
-          throw new Error(`Failed to create user: ${signUpError?.message}`);
-        }
-
-        // Insert user with Telegram data
-        const { data: newUser, error: insertError } = await supabase
-          .from("users")
+      if (!existingTelegramUser) {
+        // Create new Telegram user
+        const { data: newTelegramUser, error: insertError } = await supabase
+          .from("telegram_users")
           .insert([
             {
-              id: authData.user.id,
-              email: googleUser.email,
-              full_name: googleUser.name || "",
-              google_id: googleUser.id,
-              avatar_url: googleUser.picture || null,
-              google_access_token: tokens.access_token,
-              google_refresh_token: tokens.refresh_token || null,
-              token_expires_at: tokens.expiry_date
-                ? new Date(tokens.expiry_date).toISOString()
-                : null,
               telegram_chat_id: parseInt(stateData.telegram_chat_id),
+              full_name: googleUser.name || "",
+              username: null, // Will be updated when available
+              user_id: null, // No linked ChatGPT user initially
               updated_at: new Date().toISOString(),
             },
           ])
@@ -169,59 +146,45 @@ export class TelegramAuthController {
           .single();
 
         if (insertError) {
-          await supabase.auth.admin.deleteUser(authData.user.id);
-          throw new Error(`Failed to create user profile: ${insertError.message}`);
+          throw new Error(`Failed to create Telegram user profile: ${insertError.message}`);
         }
 
-        existingUser = newUser;
-        userId = authData.user.id;
+        existingTelegramUser = newTelegramUser;
+        telegramUserId = newTelegramUser.id;
 
       } else {
-        // Update existing user with Telegram info
-        const updateData: any = {
-          full_name: googleUser.name || existingUser.full_name,
-          google_id: googleUser.id,
-          avatar_url: googleUser.picture || existingUser.avatar_url,
-          google_access_token: tokens.access_token,
-          telegram_chat_id: parseInt(stateData.telegram_chat_id),
-          token_expires_at: tokens.expiry_date
-            ? new Date(tokens.expiry_date).toISOString()
-            : null,
-          updated_at: new Date().toISOString(),
-        };
-
-        if (tokens.refresh_token) {
-          updateData.google_refresh_token = tokens.refresh_token;
-        }
-
+        // Update existing Telegram user
         const { error: updateError } = await supabase
-          .from("users")
-          .update(updateData)
-          .eq("id", existingUser.id);
+          .from("telegram_users")
+          .update({
+            full_name: googleUser.name || existingTelegramUser.full_name,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingTelegramUser.id);
 
         if (updateError) {
-          throw new Error(`Failed to update user: ${updateError.message}`);
+          throw new Error(`Failed to update Telegram user: ${updateError.message}`);
         }
 
-        userId = existingUser.id;
+        telegramUserId = existingTelegramUser.id;
       }
 
-      // Update session with user_id
+      // Update session with telegram user_id
       await supabase
         .from("telegram_sessions")
-        .update({ 
-          user_id: userId,
+        .update({
+          user_id: telegramUserId,
           updated_at: new Date().toISOString()
         })
         .eq("id", session.id);
 
-      // Store tokens in tenant_tokens
+      // Store tokens in tenant_tokens using telegram user ID
       await supabase
         .from("tenant_tokens")
         .upsert({
-          tenant_id: userId,
+          tenant_id: telegramUserId,
           access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token || existingUser?.google_refresh_token,
+          refresh_token: tokens.refresh_token,
           expiry_date: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
           updated_at: new Date().toISOString(),
         }, {
@@ -232,7 +195,7 @@ export class TelegramAuthController {
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Authorization Successful</title>
+          <title>Telegram Authorization Successful</title>
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <style>
             body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
@@ -243,7 +206,7 @@ export class TelegramAuthController {
         </head>
         <body>
           <div class="container">
-            <div class="success">✅ Authorization Successful!</div>
+            <div class="success">✅ Telegram Authorization Successful!</div>
             <div class="info">Your Google account has been linked to your Telegram chat.</div>
             <div class="info">You can now return to Telegram and start using the bot.</div>
           </div>
@@ -257,7 +220,7 @@ export class TelegramAuthController {
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Authorization Failed</title>
+          <title>Telegram Authorization Failed</title>
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <style>
             body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
@@ -267,7 +230,7 @@ export class TelegramAuthController {
         </head>
         <body>
           <div class="container">
-            <div class="error">❌ Authorization Failed</div>
+            <div class="error">❌ Telegram Authorization Failed</div>
             <div>Error: ${error.message}</div>
           </div>
         </body>
@@ -280,18 +243,19 @@ export class TelegramAuthController {
   static async checkTelegramAuth(req: Request, res: Response) {
     try {
       const { telegram_chat_id } = req.params;
-      
+
       if (!telegram_chat_id) {
         return res.status(400).json({ error: "telegram_chat_id is required" });
       }
 
-      const { data: user, error } = await supabase
-        .from("users")
-        .select("id, email, full_name, telegram_chat_id, google_access_token, token_expires_at")
+      // Check if Telegram user exists
+      const { data: telegramUser, error: telegramError } = await supabase
+        .from("telegram_users")
+        .select("id, telegram_chat_id, full_name, username, user_id")
         .eq("telegram_chat_id", parseInt(telegram_chat_id))
         .single();
 
-      if (error || !user) {
+      if (telegramError || !telegramUser) {
         return res.json({
           authenticated: false,
           needs_auth: true,
@@ -299,8 +263,14 @@ export class TelegramAuthController {
         });
       }
 
-      // Check if Google token is still valid
-      if (!user.google_access_token) {
+      // Check if Google token exists in tenant_tokens
+      const { data: tenantToken, error: tokenError } = await supabase
+        .from("tenant_tokens")
+        .select("access_token, refresh_token, expiry_date")
+        .eq("tenant_id", telegramUser.id)
+        .single();
+
+      if (tokenError || !tenantToken || !tenantToken.access_token) {
         return res.json({
           authenticated: false,
           needs_auth: true,
@@ -309,8 +279,8 @@ export class TelegramAuthController {
       }
 
       // Check token expiry
-      if (user.token_expires_at) {
-        const expiryDate = new Date(user.token_expires_at);
+      if (tenantToken.expiry_date) {
+        const expiryDate = new Date(tenantToken.expiry_date);
         const now = new Date();
         if (now > expiryDate) {
           return res.json({
@@ -325,10 +295,11 @@ export class TelegramAuthController {
         authenticated: true,
         needs_auth: false,
         user: {
-          id: user.id,
-          email: user.email,
-          full_name: user.full_name,
-          telegram_chat_id: user.telegram_chat_id,
+          id: telegramUser.id,
+          telegram_chat_id: telegramUser.telegram_chat_id,
+          full_name: telegramUser.full_name,
+          username: telegramUser.username,
+          user_type: "telegram"
         }
       });
 
@@ -338,22 +309,22 @@ export class TelegramAuthController {
     }
   }
 
-  // 4. Get user by Telegram chat ID
+  // 4. Get Telegram user by Telegram chat ID
   static async getUserByTelegramId(telegram_chat_id: number) {
     try {
-      const { data: user, error } = await supabase
-        .from("users")
+      const { data: telegramUser, error } = await supabase
+        .from("telegram_users")
         .select("*")
         .eq("telegram_chat_id", telegram_chat_id)
         .single();
 
-      if (error || !user) {
-        throw new Error("User not found for this Telegram chat");
+      if (error || !telegramUser) {
+        throw new Error("Telegram user not found for this chat ID");
       }
 
-      return user;
+      return telegramUser;
     } catch (error: any) {
-      throw new Error(`Failed to get user: ${error.message}`);
+      throw new Error(`Failed to get Telegram user: ${error.message}`);
     }
   }
 
@@ -383,13 +354,25 @@ export class TelegramAuthController {
         return res.status(401).json({ error: "User not authenticated" });
       }
 
+      // Find Telegram user linked to this ChatGPT user
+      const { data: telegramUser, error: findError } = await supabase
+        .from("telegram_users")
+        .select("id")
+        .eq("user_id", userId)
+        .single();
+
+      if (findError || !telegramUser) {
+        return res.status(404).json({ error: "No linked Telegram account found" });
+      }
+
+      // Remove the link between Telegram user and ChatGPT user
       const { error } = await supabase
-        .from("users")
+        .from("telegram_users")
         .update({
-          telegram_chat_id: null,
+          user_id: null,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", userId);
+        .eq("id", telegramUser.id);
 
       if (error) {
         throw new Error(`Failed to disconnect Telegram: ${error.message}`);
@@ -399,7 +382,13 @@ export class TelegramAuthController {
       await supabase
         .from("telegram_sessions")
         .delete()
-        .eq("user_id", userId);
+        .eq("user_id", telegramUser.id);
+
+      // Clean up tenant tokens
+      await supabase
+        .from("tenant_tokens")
+        .delete()
+        .eq("tenant_id", telegramUser.id);
 
       res.json({
         success: true,
@@ -411,25 +400,68 @@ export class TelegramAuthController {
       res.status(500).json({ error: error.message });
     }
   }
-  // GET /api/auth/user/:userId/with-token
-static async getUserWithToken(req: Request, res: Response) {
-  try {
-    const { userId } = req.params;
-    const user = await AuthController.getUserWithGoogleToken(userId);
-    
-    res.json({
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        full_name: user.full_name,
-        google_access_token: user.google_access_token,
-        token_expires_at: user.token_expires_at
-      }
-    });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-}
+ // GET /api/auth/user/:userId/with-token
+ static async getUserWithToken(req: Request, res: Response) {
+   try {
+     const { userId } = req.params;
+
+     // Check if this is a Telegram user ID
+     const { data: telegramUser, error: telegramError } = await supabase
+       .from("telegram_users")
+       .select("id, telegram_chat_id, full_name, username, user_id")
+       .eq("id", userId)
+       .single();
+
+     if (!telegramError && telegramUser) {
+       // This is a Telegram user, get their tokens from tenant_tokens
+       const { data: tenantToken, error: tokenError } = await supabase
+         .from("tenant_tokens")
+         .select("access_token, refresh_token, expiry_date")
+         .eq("tenant_id", userId)
+         .single();
+
+       if (tokenError || !tenantToken) {
+         return res.status(404).json({ error: "No Google tokens found for this Telegram user" });
+       }
+
+       return res.json({
+         success: true,
+         user: {
+           id: telegramUser.id,
+           telegram_chat_id: telegramUser.telegram_chat_id,
+           full_name: telegramUser.full_name,
+           username: telegramUser.username,
+           google_access_token: tenantToken.access_token,
+           google_refresh_token: tenantToken.refresh_token,
+           token_expires_at: tenantToken.expiry_date,
+           user_type: "telegram"
+         }
+       });
+     }
+
+     // If not a Telegram user, try to get as ChatGPT user
+     try {
+       const user = await AuthController.getUserWithGoogleToken(userId);
+
+       return res.json({
+         success: true,
+         user: {
+           id: user.id,
+           email: user.email,
+           full_name: user.full_name,
+           google_access_token: user.google_access_token,
+           token_expires_at: user.token_expires_at,
+           user_type: "chatgpt"
+         }
+       });
+     } catch (chatgptError) {
+       return res.status(404).json({ error: "User not found" });
+     }
+
+   } catch (error: any) {
+     console.error("Error getting user with token:", error);
+     res.status(500).json({ error: error.message });
+   }
+ }
 }
 

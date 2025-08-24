@@ -4,7 +4,11 @@ import { EventService, EventData, RecurringEventData } from "../services/eventSe
 export class EventController {
   static async createCalendarEvent(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const calendarId = req.params.calendarId || "primary";
 
       const {
@@ -57,7 +61,11 @@ export class EventController {
 
   static async updateCalendarEvent(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const { eventId } = req.params;
       const calendarId = req.params.calendarId || "primary";
 
@@ -111,7 +119,11 @@ export class EventController {
 
   static async deleteCalendarEvent(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const { eventId } = req.params;
       const calendarId = req.params.calendarId || "primary";
 
@@ -142,7 +154,11 @@ export class EventController {
 
   static async getCalendarEvent(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const { eventId } = req.params;
       const calendarId = req.params.calendarId || req.query.calendarId as string || "primary";
 
@@ -173,7 +189,11 @@ export class EventController {
 
   static async getCalendarEvents(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const calendarId = req.params.calendarId || "primary";
 
       const result = await EventService.getEvents(tenantId, calendarId, req.query);
@@ -201,7 +221,11 @@ export class EventController {
 
   static async getPrimaryCalendarEvents(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const calendarId = req.query.calendarId as string || "primary";
 
       const result = await EventService.getEvents(tenantId, calendarId, req.query);
@@ -229,7 +253,11 @@ export class EventController {
 
   static async getFreeBusyInfo(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const { timeMin, timeMax, calendarIds } = req.query;
 
       const result = await EventService.getFreeBusyInfo(
@@ -262,7 +290,11 @@ export class EventController {
 
   static async getAvailableTimeSlots(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const { date, startTime, endTime, duration, calendarId } = req.query;
 
       const result = await EventService.getAvailableTimeSlots(tenantId, date as string, {
@@ -295,7 +327,11 @@ export class EventController {
 
   static async createRecurringEvent(req: Request, res: Response) {
     try {
-      const tenantId = req.body.tenantId;
+      const tenantId = req.user?.id;
+      if (!tenantId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
       const calendarId = req.params.calendarId || "primary";
 
       const {

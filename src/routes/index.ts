@@ -10,17 +10,17 @@ const router = Router();
 
 
 // Standard Auth routes (public)
-router.post("/auth/register", AuthController.register);
-router.post("/auth/login", AuthController.login);
 router.post("/auth/logout", AuthController.logout);
 router.get("/auth/google", AuthController.googleAuth);
 router.get("/auth/me", AuthController.getMe);
 
 // Telegram Auth routes (public) - MUST be before requireGoogleAuth middleware
 router.post("/telegram/oauth/generate", TelegramAuthController.generateTelegramOAuthUrl);
-router.get("/auth/callback", TelegramAuthController.handleTelegramOAuthCallback);
 router.get("/telegram/check/:telegram_chat_id", TelegramAuthController.checkTelegramAuth);
 router.get("/auth/user/:userId/with-token", TelegramAuthController.getUserWithToken);
+
+// OAuth callback route (handles both ChatGPT and Telegram OAuth)
+router.get("/auth/callback", AuthController.oauthCallback);
 
 // Google-specific routes (require Google auth)
 router.get("/google/status", requireGoogleAuth, AuthController.testGoogleConnection);
