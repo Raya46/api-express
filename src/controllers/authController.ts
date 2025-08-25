@@ -21,23 +21,17 @@ export class AuthController {
     res.json(req.user);
   }
 
-  /**
-   * Generate Google OAuth URL for ChatGPT users
-   */
-  static async googleAuth(req: Request, res: Response) {
-    try {
-      const { auth_url } = await AuthService.generateGoogleAuthUrl(req.user?.id);
-      res.redirect(auth_url);
-    } catch (error: any) {
-      console.error("Error in googleAuth:", error);
-      res.status(500).json({ error: error.message });
-    }
-  }
 
-  /**
-   * Handle Google OAuth callback for ChatGPT users
-   */
-  // In your AuthController.ts file
+static async googleAuth(req: Request, res: Response) {
+  try {
+    // Tentukan tipe login sebagai 'chatgpt'
+    const { auth_url } = await AuthService.generateGoogleAuthUrl(req.user?.id, 'chatgpt');
+    res.redirect(auth_url);
+  } catch (error: any) {
+    console.error("Error in googleAuth:", error);
+    res.status(500).json({ error: error.message });
+  }
+}
 
 static async oauthCallback(req: Request, res: Response) {
   const { code, state } = req.query;
@@ -48,8 +42,9 @@ static async oauthCallback(req: Request, res: Response) {
 
   try {
     const stateData = JSON.parse(state as string);
+        const loginType = stateData.type; 
 
-    if (stateData.type === 'telegram_oauth') {
+    if (loginType === 'telegram_oauth') {
 
       await TelegramService.handleTelegramOAuthCallback(code as string, state as string);
       

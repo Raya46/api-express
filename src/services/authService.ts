@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import jwt from "jsonwebtoken";
 import { supabase } from "../config/supabase";
 import { UrlShortenerService } from "./urlShortenerService";
+import { randomBytes } from 'crypto'; 
 
 export interface GoogleUser {
   id: string;
@@ -40,43 +41,51 @@ export class AuthService {
   /**
    * Generate Google OAuth URL for ChatGPT users
    */
-  static async generateGoogleAuthUrl(userId?: string): Promise<{
-    auth_url: string;
-    original_url: string;
-  }> {
-    // Create new OAuth2 client instance for this request
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
-    );
+ static async generateGoogleAuthUrl(userId?: string, type: 'chatgpt' | 'telegram' = 'chatgpt'): Promise<{
+  auth_url: string;
+  original_url: string;
+}> {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
 
-    const scopes = [
-      "https://www.googleapis.com/auth/calendar",
-      "https://www.googleapis.com/auth/calendar.readonly",
-      "https://www.googleapis.com/auth/userinfo.email",
-      "https://www.googleapis.com/auth/userinfo.profile",
-    ];
+  const scopes = [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+  ];
 
-    // Add state parameter to track user and force approval
-    const state = userId ? JSON.stringify({ userId }) : '';
+  // SELALU BUAT OBJEK STATE YANG VALID
+  const stateObject: any = {
+    type: type === 'telegram' ? 'telegram_oauth' : 'chatgpt_oauth', // Bedakan tipe login
+    nonce: randomBytes(16).toString('hex') // Tambahkan nonce untuk keamanan
+  };
 
-    const originalUrl = oauth2Client.generateAuthUrl({
-      access_type: "offline",
-      scope: scopes,
-      include_granted_scopes: true,
-      prompt: 'consent', // Force consent to get refresh token
-      state: state, // Track the user making the request
-    });
-
-    // Shorten the auth URL using TinyURL (like Telegram)
-    const shortenedAuthUrl = await UrlShortenerService.shortenAuthUrl(originalUrl, userId);
-
-    return {
-      auth_url: shortenedAuthUrl,
-      original_url: originalUrl
-    };
+  // Hanya tambahkan userId jika ada
+  if (userId) {
+    stateObject.userId = userId;
   }
+
+  const state = JSON.stringify(stateObject);
+
+  const originalUrl = oauth2Client.generateAuthUrl({
+    access_type: "offline",
+    scope: scopes,
+    include_granted_scopes: true,
+    prompt: 'consent',
+    state: state, // State sekarang dijamin tidak pernah kosong
+  });
+
+  const shortenedAuthUrl = await UrlShortenerService.shortenAuthUrl(originalUrl, userId);
+
+  return {
+    auth_url: shortenedAuthUrl,
+    original_url: originalUrl
+  };
+}
 
   static async handleGoogleOAuthCallback(code: string, state?: string): Promise<AuthResult> {
     try {
