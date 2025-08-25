@@ -11,8 +11,8 @@ export class EventController {
       location,
       attendees,
       reminders,
-      visibility = "default",
-      timeZone = "Asia/Jakarta"
+      visibility ,
+      timeZone
     } = body;
 
     let startDateTime: string;
@@ -169,7 +169,7 @@ export class EventController {
       attendees,
       reminders,
       visibility,
-      timeZone = "Asia/Jakarta"
+      timeZone
     } = body;
 
     const updateData: Partial<EventData> = {
@@ -446,7 +446,7 @@ export class EventController {
         count,
         until,
         byDay,
-        timeZone = "Asia/Jakarta"
+        timeZone
       } = req.body;
 
       let startDateTime: string;

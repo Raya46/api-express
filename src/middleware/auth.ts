@@ -87,8 +87,6 @@ export const authenticateToken = async (
         };
       }
     } else {
-      // This is a Telegram user (no email in decoded token)
-      // Verify Telegram user exists in database
       const result = await supabase
         .from('telegram_users')
         .select('id, telegram_chat_id, full_name, username')
@@ -133,22 +131,6 @@ export const authenticateToken = async (
   }
 };
 
-// Enhanced middleware that also checks Google token validity
-export const requireGoogleAuth = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  // First run basic authentication
-  authenticateToken(req, res, (err) => {
-    if (err) return next(err);
-    
-    // If basic auth passed, continue with Google token check
-    checkGoogleTokenValidity(req, res, next);
-  });
-};
-
-
 const checkGoogleTokenValidity = async (
   req: Request,
   res: Response,
@@ -162,50 +144,33 @@ const checkGoogleTokenValidity = async (
       });
     }
 
-    const userId = req.user.id;
+    const tenantId = req.user.id;
     const userType = req.user.user_type;
+    
+    // Tentukan authUrl berdasarkan tipe pengguna
+    const authUrl = userType === 'telegram'
+      ? `${process.env.BASE_URL}/api/telegram/oauth/generate`
+      : `${process.env.BASE_URL}/api/auth/google`;
 
-    let tokenInfo: { access_token: string | null, refresh_token: string | null, expiry_date: string | null } | null = null;
-    let authUrl = '';
+    // --- LOGIKA TERUNIFIKASI: SELALU GUNAKAN 'tenant_tokens' ---
+    const { data: tokenInfo, error: fetchError } = await supabase
+      .from('tenant_tokens')
+      .select('access_token, refresh_token, expiry_date')
+      .eq('tenant_id', tenantId)
+      .single();
 
-    if (userType === 'telegram') {
-      authUrl = `${process.env.BASE_URL}/api/telegram/oauth/generate`; // Define auth URL for telegram
-      const { data, error } = await supabase
-        .from('tenant_tokens')
-        .select('access_token, refresh_token, expiry_date')
-        .eq('tenant_id', userId)
-        .single();
-      if (error) throw new Error("Could not fetch tenant tokens for Telegram user.");
-      tokenInfo = data;
-
-    } else { // Assumes 'chatgpt' user
-      authUrl = `${process.env.BASE_URL}/api/auth/google`; // Define auth URL for GPT
-      const { data, error } = await supabase
-        .from('users')
-        .select('google_access_token, google_refresh_token, token_expires_at')
-        .eq('id', userId)
-        .single();
-      if (error) throw new Error("Could not fetch user tokens for GPT user.");
-      // Standardize the object keys to match tenant_tokens
-      tokenInfo = {
-          access_token: data?.google_access_token || null,
-          refresh_token: data?.google_refresh_token || null,
-          expiry_date: data?.token_expires_at || null,
-      };
-    }
-
-    if (!tokenInfo || !tokenInfo.access_token) {
-       return res.status(401).json({
-          error: 'Google authentication required',
-          needsAuth: true,
-          authUrl: authUrl
-       });
+    if (fetchError || !tokenInfo || !tokenInfo.access_token) {
+      return res.status(401).json({
+        error: 'Google authentication required. No valid tokens found.',
+        needsAuth: true,
+        authUrl: authUrl
+      });
     }
 
     const isTokenExpired = tokenInfo.expiry_date ? new Date() > new Date(new Date(tokenInfo.expiry_date).getTime() - (5 * 60 * 1000)) : true;
 
     if (isTokenExpired) {
-      console.log(`Google token for ${userType} user ${userId} requires refresh.`);
+      console.log(`Google token for tenant ${tenantId} requires refresh.`);
 
       if (!tokenInfo.refresh_token) {
         return res.status(401).json({
@@ -215,7 +180,7 @@ const checkGoogleTokenValidity = async (
         });
       }
 
-      // --- Universal Token Refresh Logic ---
+      // --- LOGIKA REFRESH TERUNIFIKASI ---
       try {
         const oauth2Client = new google.auth.OAuth2(
           process.env.GOOGLE_CLIENT_ID,
@@ -226,34 +191,25 @@ const checkGoogleTokenValidity = async (
         const { credentials } = await oauth2Client.refreshAccessToken();
         const newTokens = credentials;
 
-        console.log('Google token refreshed successfully.');
+        console.log(`Google token for tenant ${tenantId} refreshed successfully.`);
 
-        // --- Universal Token Update Logic ---
+        // --- LOGIKA UPDATE TERUNIFIKASI: SELALU UPDATE 'tenant_tokens' ---
         const updatePayload = {
-            access_token: newTokens.access_token,
-            expiry_date: newTokens.expiry_date ? new Date(newTokens.expiry_date).toISOString() : null,
-            // Only update refresh token if a new one is provided
-            ...(newTokens.refresh_token && { refresh_token: newTokens.refresh_token }),
-            updated_at: new Date().toISOString(),
+          access_token: newTokens.access_token,
+          expiry_date: newTokens.expiry_date ? new Date(newTokens.expiry_date).toISOString() : null,
+          ...(newTokens.refresh_token && { refresh_token: newTokens.refresh_token }),
+          updated_at: new Date().toISOString(),
         };
 
-        if (userType === 'telegram') {
-            const { error } = await supabase.from('tenant_tokens').update(updatePayload).eq('tenant_id', userId);
-            if (error) throw new Error("Failed to update refreshed tokens for Telegram user.");
-        } else {
-            // Adapt keys for the 'users' table
-            const userUpdatePayload = {
-                google_access_token: updatePayload.access_token,
-                token_expires_at: updatePayload.expiry_date,
-                ...(updatePayload.refresh_token && { google_refresh_token: updatePayload.refresh_token }),
-                updated_at: updatePayload.updated_at,
-            };
-            const { error } = await supabase.from('users').update(userUpdatePayload).eq('id', userId);
-            if (error) throw new Error("Failed to update refreshed tokens for GPT user.");
-        }
+        const { error: updateError } = await supabase
+          .from('tenant_tokens')
+          .update(updatePayload)
+          .eq('tenant_id', tenantId);
+          
+        if (updateError) throw new Error(`Failed to update refreshed tokens for tenant ${tenantId}.`);
 
       } catch (refreshError: any) {
-        console.error('Failed to refresh Google token:', refreshError.message);
+        console.error(`Failed to refresh Google token for tenant ${tenantId}:`, refreshError.message);
         return res.status(401).json({
           error: 'Failed to refresh Google token. Please re-authenticate.',
           needsAuth: true,
@@ -263,11 +219,26 @@ const checkGoogleTokenValidity = async (
     }
 
     next();
+
   } catch (error: any) {
     console.error('Google auth check error:', error);
     res.status(500).json({ error: 'Authentication check failed' });
   }
 };
+
+export const requireGoogleAuth = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  // First run basic authentication
+  authenticateToken(req, res, (err) => {
+    if (err) return next(err);
+    
+    checkGoogleTokenValidity(req, res, next);
+  });
+};
+
 
 export const telegramAuthMiddleware = async (req: Request, res: Response, next: NextFunction) => {
   const telegramChatId = req.headers['x-telegram-chat-id'];

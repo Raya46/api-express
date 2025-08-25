@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
-import { CalendarService, CalendarData } from "../services/calendarService";
-import { UserNotLinkedError, GoogleAuthRequiredError, CalendarNotFoundError } from "../types/errors";
+import { CalendarData, CalendarService } from "../services/calendarService";
 
 export class CalendarController {
   static async createCalendar(req: Request, res: Response) {
