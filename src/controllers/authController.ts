@@ -34,29 +34,191 @@ static async googleAuth(req: Request, res: Response) {
 }
 
 static async oauthCallback(req: Request, res: Response) {
-  const { code, state } = req.query;
+    const { code, state } = req.query;
 
-  if (!code || !state) {
-    return res.status(400).send("Authorization code or state not provided.");
-  }
+    console.log("OAuth callback received:", { 
+      hasCode: !!code, 
+      hasState: !!state,
+      state: state ? String(state).substring(0, 100) + '...' : 'none' // Log partial state for debugging
+    });
 
-  try {
-    const stateData = JSON.parse(state as string);
-        const loginType = stateData.type; 
+    if (!code || !state) {
+      console.error("Missing required parameters:", { code: !!code, state: !!state });
+      return res.status(400).send("Authorization code or state not provided.");
+    }
 
-    if (loginType === 'telegram_oauth') {
-
-      await TelegramService.handleTelegramOAuthCallback(code as string, state as string);
+    try {
+      console.log("Parsing state data...");
+      const stateData = JSON.parse(state as string);
+      const loginType = stateData.type;
       
-      return res.send(`
+      console.log("Login type determined:", loginType);
+
+      if (loginType === 'telegram_oauth') {
+        console.log("Processing Telegram OAuth callback...");
+        
+        await TelegramService.handleTelegramOAuthCallback(code as string, state as string);
+        
+        return res.send(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Authorization Successful</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                background-color: #f0f8f0;
+                margin: 0;
+                padding: 20px;
+                text-align: center;
+              }
+              .container {
+                max-width: 600px;
+                margin: 50px auto;
+                background: white;
+                padding: 30px;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+              }
+              .success {
+                color: #28a745;
+                font-size: 24px;
+                margin-bottom: 20px;
+              }
+              .info {
+                color: #333;
+                font-size: 16px;
+                margin-bottom: 30px;
+              }
+              .telegram-link {
+                display: inline-block;
+                background-color: #0088cc;
+                color: white;
+                padding: 12px 24px;
+                text-decoration: none;
+                border-radius: 5px;
+                font-weight: bold;
+                transition: background-color 0.3s;
+              }
+              .telegram-link:hover {
+                background-color: #006699;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="success">✅ Authorization Successful!</div>
+              <div class="info">Your Google account is now linked. You can return to Telegram.</div>
+              <a href="https://t.me/proj_exp_bot" class="telegram-link">🔙 Return to Telegram Bot</a>
+            </div>
+          </body>
+          </html>
+        `);
+
+      } else {
+        console.log("Processing ChatGPT OAuth callback...");
+        
+        try {
+          const result = await AuthService.handleGoogleOAuthCallback(code as string, state as string);
+          
+          console.log("OAuth callback result:", {
+            success: result.success,
+            hasToken: !!result.token,
+            hasUser: !!result.user,
+            userEmail: result.user?.email
+          });
+
+          return res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Authentication Successful</title>
+              <style>
+                body {
+                  font-family: Arial, sans-serif;
+                  background-color: #f0f8f0;
+                  margin: 0;
+                  padding: 20px;
+                  text-align: center;
+                }
+                .container {
+                  max-width: 600px;
+                  margin: 50px auto;
+                  background: white;
+                  padding: 30px;
+                  border-radius: 10px;
+                  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }
+                .success {
+                  color: #28a745;
+                  font-size: 24px;
+                  margin-bottom: 20px;
+                }
+                .info {
+                  color: #333;
+                  font-size: 16px;
+                  margin-bottom: 30px;
+                }
+                .debug-info {
+                  background-color: #f8f9fa;
+                  padding: 15px;
+                  border-radius: 5px;
+                  margin: 20px 0;
+                  font-size: 12px;
+                  color: #666;
+                  text-align: left;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <div class="success">✅ Authentication Successful!</div>
+                <div class="info">You can close this window and return to ChatGPT.</div>
+                <div class="debug-info">
+                  <strong>Debug Info:</strong><br>
+                  User: ${result.user?.email || 'N/A'}<br>
+                  Token: ${result.token ? 'Generated' : 'Not generated'}<br>
+                  Timestamp: ${new Date().toISOString()}
+                </div>
+                <script>
+                  console.log('Authentication completed successfully');
+                  console.log('User:', ${JSON.stringify(result.user || {})});
+                  // Auto close after 3 seconds
+                  setTimeout(function() {
+                    window.close();
+                  }, 3000);
+                </script>
+              </div>
+            </body>
+            </html>
+          `);
+          
+        } catch (authError: any) {
+          console.error("AuthService.handleGoogleOAuthCallback failed:", authError);
+          console.error("Auth error stack:", authError.stack);
+          
+          throw authError; // Re-throw to be caught by outer catch block
+        }
+      }
+    } catch (error: any) {
+      console.error("Error in master OAuth callback:", error.message);
+      console.error("Full error object:", error);
+      
+      if (error.response) {
+        console.error("Response data:", error.response.data);
+        console.error("Response status:", error.response.status);
+      }
+      
+      // Enhanced error page with debugging info
+      return res.status(500).send(`
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Authorization Successful</title>
+          <title>Authorization Failed</title>
           <style>
             body {
               font-family: Arial, sans-serif;
-              background-color: #f0f8f0;
+              background-color: #fff5f5;
               margin: 0;
               padding: 20px;
               text-align: center;
@@ -69,93 +231,85 @@ static async oauthCallback(req: Request, res: Response) {
               border-radius: 10px;
               box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             }
-            .success {
-              color: #28a745;
+            .error {
+              color: #dc3545;
               font-size: 24px;
               margin-bottom: 20px;
             }
-            .info {
-              color: #333;
-              font-size: 16px;
-              margin-bottom: 30px;
+            .error-details {
+              background-color: #f8f9fa;
+              padding: 15px;
+              border-radius: 5px;
+              margin: 20px 0;
+              font-size: 14px;
+              color: #666;
+              text-align: left;
+              word-wrap: break-word;
             }
-            .telegram-link {
+            .retry-button {
               display: inline-block;
-              background-color: #0088cc;
+              background-color: #007bff;
               color: white;
               padding: 12px 24px;
               text-decoration: none;
               border-radius: 5px;
               font-weight: bold;
-              transition: background-color 0.3s;
-            }
-            .telegram-link:hover {
-              background-color: #006699;
+              margin-top: 20px;
             }
           </style>
         </head>
         <body>
           <div class="container">
-            <div class="success">✅ Authorization Successful!</div>
-            <div class="info">Your Google account is now linked. You can return to Telegram.</div>
-            <a href="https://t.me/proj_exp_bot" class="telegram-link">🔙 Return to Telegram Bot</a>
+            <div class="error">❌ Authorization Failed</div>
+            <div>Something went wrong during authentication.</div>
+            <div class="error-details">
+              <strong>Error Details:</strong><br>
+              Message: ${error.message}<br>
+              Type: ${error.constructor.name}<br>
+              Timestamp: ${new Date().toISOString()}<br>
+              ${error.code ? `Code: ${error.code}<br>` : ''}
+              ${error.hint ? `Hint: ${error.hint}<br>` : ''}
+            </div>
+            <a href="${process.env.BASE_URL || 'http://localhost:3000'}/api/auth/google" class="retry-button">
+              🔄 Try Again
+            </a>
           </div>
         </body>
         </html>
       `);
-
-    } else {
-      return res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head><title>Authentication Successful</title></head>
-        <body>
-          <p>Authentication successful! You can close this window and return to ChatGPT.</p>
-          <script>window.close();</script>
-        </body>
-        </html>
-      `);
     }
-  } catch (error: any) {
-    console.error("Error in master OAuth callback:", error.message);
-    if (error.response) {
-      console.error("Response data:", error.response.data);
-      console.error("Response status:", error.response.status);
-    }
-    return res.status(500).send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Authorization Failed</title>
-        <style>/* ... your error CSS ... */</style>
-      </head>
-      <body>
-        <div class="container">
-            <div class="error">❌ Authorization Failed</div>
-            <div>Error: ${error.message}</div>
-        </div>
-      </body>
-      </html>
-    `);
   }
-}
 
   static async exchangeCodeForToken(req: Request, res: Response) {
     try {
       const { code, client_id, client_secret } = req.body;
 
+      console.log("Exchange code for token request:", {
+        hasCode: !!code,
+        client_id: client_id,
+        hasClientSecret: !!client_secret
+      });
+
       if (client_id !== process.env.GOOGLE_CLIENT_ID || client_secret !== process.env.GOOGLE_CLIENT_SECRET) {
+        console.error("Invalid client credentials provided");
         return res.status(401).json({ error: 'Invalid client credentials' });
       }
 
-      // Exchange the authorization code for Google tokens
+      console.log("Exchanging authorization code for tokens...");
+
       const result = await AuthService.handleGoogleOAuthCallback(code);
 
+      console.log("Exchange result:", {
+        success: result.success,
+        hasUser: !!result.user,
+        userEmail: result.user?.email
+      });
+
       if (!result.success || !result.user) {
+        console.error("OAuth exchange failed:", result);
         return res.status(400).json({ error: 'invalid_grant' });
       }
 
-      // Generate internal JWT token for GPT (not exposing Google tokens)
       const internalToken = jwt.sign(
         {
           userId: result.user.id,
@@ -166,7 +320,8 @@ static async oauthCallback(req: Request, res: Response) {
         { expiresIn: '1h' } // 1 hour expiration
       );
 
-      // Return OAuth 2.0 compliant response
+      console.log("Generated internal token for user:", result.user.email);
+
       res.json({
         access_token: internalToken,
         token_type: 'Bearer',
@@ -175,13 +330,12 @@ static async oauthCallback(req: Request, res: Response) {
 
     } catch (error: any) {
       console.error("Error exchanging code for token:", error);
+      console.error("Exchange error stack:", error.stack);
       res.status(400).json({ error: 'invalid_grant' });
     }
   }
 
-  /**
-   * Get current user from Supabase Auth
-   */
+ 
   static async getMe(req: Request, res: Response) {
     try {
       const user = await AuthService.getCurrentUser();
@@ -192,9 +346,7 @@ static async oauthCallback(req: Request, res: Response) {
     }
   }
 
-  /**
-   * Test Google connection for ChatGPT user
-   */
+  
   static async testGoogleConnection(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
